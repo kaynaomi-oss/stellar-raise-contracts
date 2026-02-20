@@ -702,6 +702,11 @@ fn test_bug_condition_exploration_all_error_conditions_panic() {
         let contributor = Address::generate(&env);
         mint_to(&env, &token_address, &admin, &contributor, 500_000);
         client.contribute(&contributor, &500_000);
+        client.initialize(&creator, &token_address, &goal, &deadline, &1_000, &None);
+
+        let contributor = Address::generate(&env);
+        mint_to(&env, &token_address, &admin, &contributor, 500_000);
+        client.contribute(&contributor, &500_000);
 
         let result = client.try_refund();
 
@@ -1325,6 +1330,106 @@ fn test_multiple_pledgers() {
 // Note: The non-creator test would require complex mock setup.
 // The authorization check is covered by require_auth() in the contract,
 // which will panic if the caller is not the creator.
+
+// ── Deadline Update Tests ──────────────────────────────────────────────────
+
+#[test]
+fn test_update_deadline_extends_campaign() {
+    let (env, client, creator, token_address, _admin) = setup_env();
+
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let min_contribution: i128 = 1_000;
+    client.initialize(
+        &creator,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+        &None,
+    );
+
+    // Verify initial deadline
+    assert_eq!(client.deadline(), deadline);
+
+    // Extend the deadline
+    let new_deadline = deadline + 7200; // 2 more hours
+    client.update_deadline(&new_deadline);
+
+    // Verify the deadline was updated
+    assert_eq!(client.deadline(), new_deadline);
+}
+
+#[test]
+#[should_panic(expected = "new deadline must be after current deadline")]
+fn test_update_deadline_rejects_shortening() {
+    let (env, client, creator, token_address, _admin) = setup_env();
+
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let min_contribution: i128 = 1_000;
+    client.initialize(
+        &creator,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+        &None,
+    );
+
+    // Try to shorten the deadline (should panic)
+    let shorter_deadline = deadline - 1800; // 30 minutes earlier
+    client.update_deadline(&shorter_deadline);
+}
+
+#[test]
+#[should_panic(expected = "new deadline must be after current deadline")]
+fn test_update_deadline_rejects_equal_deadline() {
+    let (env, client, creator, token_address, _admin) = setup_env();
+
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let min_contribution: i128 = 1_000;
+    client.initialize(
+        &creator,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+        &None,
+    );
+
+    // Try to set deadline to the same value (should panic)
+    client.update_deadline(&deadline);
+}
+
+#[test]
+#[should_panic(expected = "campaign is not active")]
+fn test_update_deadline_when_not_active_panics() {
+    let (env, client, creator, token_address, _admin) = setup_env();
+
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let min_contribution: i128 = 1_000;
+    client.initialize(
+        &creator,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+        &None,
+    );
+
+    // Move past deadline and refund
+    env.ledger().set_timestamp(deadline + 1);
+
+    // Refund to change status from Active to Refunded
+    let _ = client.try_refund();
+
+    // Try to update deadline on a non-Active campaign (should panic)
+    let new_deadline = deadline + 7200;
+    client.update_deadline(&new_deadline);
+}
 
 // ── Stretch Goal Tests ─────────────────────────────────────────────────────
 

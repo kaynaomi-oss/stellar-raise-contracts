@@ -1259,6 +1259,49 @@ impl CrowdfundContract {
     }
 
     /// Add a roadmap item — only callable by the creator.
+    /// Update the campaign deadline — only callable by the creator while the
+    /// campaign is still Active.
+    ///
+    /// # Arguments
+    /// * `new_deadline` – The new deadline as a ledger timestamp (must be greater than current deadline).
+    ///
+    /// # Panics
+    /// * If the campaign is not Active.
+    /// * If new_deadline is less than or equal to the current deadline.
+    pub fn update_deadline(env: Env, new_deadline: u64) {
+        // Check campaign is active.
+        let status: Status = env.storage().instance().get(&DataKey::Status).unwrap();
+        if status != Status::Active {
+            panic!("campaign is not active");
+        }
+
+        // Require creator authentication.
+        let creator: Address = env.storage().instance().get(&DataKey::Creator).unwrap();
+        creator.require_auth();
+
+        // Get the current deadline.
+        let current_deadline: u64 = env.storage().instance().get(&DataKey::Deadline).unwrap();
+
+        // Ensure new_deadline is greater than current_deadline (only extensions allowed).
+        if new_deadline <= current_deadline {
+            panic!("new deadline must be after current deadline");
+        }
+
+        // Update the deadline.
+        env.storage()
+            .instance()
+            .set(&DataKey::Deadline, &new_deadline);
+
+        // Emit deadline_updated event with old and new deadline values.
+        env.events().publish(
+            ("campaign", "deadline_updated"),
+            (current_deadline, new_deadline),
+        );
+    }
+
+    // ── View helpers ────────────────────────────────────────────────────
+
+    /// Add a roadmap item to the campaign timeline.
     ///
     /// # Arguments
     /// * `date`        – Future Unix timestamp for the milestone.
