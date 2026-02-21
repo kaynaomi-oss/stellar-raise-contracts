@@ -744,6 +744,26 @@ fn test_refund_when_goal_reached_panics() {
         crate::ContractError::GoalReached
     );
 }
+#[test]
+fn test_refund_single_before_deadline_fails() {
+    let (env, client, creator, token_address, admin) = setup_env();
+
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let min_contribution: i128 = 1_000;
+    client.initialize(&creator, &token_address, &goal, &deadline, &min_contribution, &default_title(&env), &default_description(&env), &None);
+
+    let contributor = Address::generate(&env);
+    mint_to(&env, &token_address, &admin, &contributor, 500_000);
+    client.contribute(&contributor, &500_000);
+
+    // Try to refund before deadline passes
+    let result = client.try_refund_single(&contributor);
+
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().unwrap(), crate::ContractError::CampaignStillActive);
+}
+
 
 // ── Bug Condition Exploration Test ─────────────────────────────────────────
 
