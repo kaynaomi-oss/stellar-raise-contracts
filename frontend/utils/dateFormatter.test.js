@@ -7,6 +7,7 @@ import {
 
 // Fixed reference timestamp: Feb 22, 2026 00:00:00 UTC
 const FIXED_TIMESTAMP = 1771718400;
+const FIXED_TIMESTAMP = 1740182400;
 
 describe("formatDate", () => {
   test("formats a valid Unix timestamp to MMM DD YYYY", () => {
