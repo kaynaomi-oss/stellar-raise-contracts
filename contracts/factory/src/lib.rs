@@ -154,7 +154,7 @@ impl FactoryContract {
 // Factory contract for batch campaign initialization
 // Implements Issue #68 and extends Issue #23
 
-use soroban_sdk::{contractimpl, contracttype, BytesN, Address, Env, Symbol, String, Vec};
+use soroban_sdk::{contractimpl, contracttype, Address, BytesN, Env, String, Symbol, Vec};
 
 // Registry key for storing deployed campaigns
 const REGISTRY_KEY: &str = "campaign_registry";
@@ -217,13 +217,16 @@ impl FactoryContract {
         for addr in deployed.iter() {
             registry.push_back(addr.clone());
         }
-        env.storage().persistent().set(&REGISTRY_KEY.into(), &registry);
+        env.storage()
+            .persistent()
+            .set(&REGISTRY_KEY.into(), &registry);
         // Emit batch_campaigns_created event
         let event = BatchCreatedEvent {
             count: deployed.len() as u32,
             addresses: deployed.clone(),
         };
-        env.events().publish(("factory", "batch_campaigns_created"), event);
+        env.events()
+            .publish(("factory", "batch_campaigns_created"), event);
         Ok(deployed)
     }
 }
@@ -254,7 +257,6 @@ fn deploy_and_init_campaign(env: &Env, config: &CampaignConfig) -> Address {
         ),
     );
     campaign_addr
-}
 }
 
 #[cfg(test)]

@@ -730,7 +730,12 @@ impl CrowdfundContract {
     /// after the deadline has passed or if the campaign is not active.
     pub fn contribute(env: Env, contributor: Address, amount: i128) -> Result<(), ContractError> {
     /// after the deadline has passed.
-    pub fn contribute(env: Env, contributor: Address, amount: i128, referral: Option<Address>) -> Result<(), ContractError> {
+    pub fn contribute(
+        env: Env,
+        contributor: Address,
+        amount: i128,
+        referral: Option<Address>,
+    ) -> Result<(), ContractError> {
         // ── Rate limiting: enforce cooldown between contributions ──
         let now = env.ledger().timestamp();
         let last_time_key = DataKey::LastContributionTime(contributor.clone());
@@ -1039,31 +1044,32 @@ impl CrowdfundContract {
         );
             .publish(("campaign", "contributed"), (contributor, effective_amount));
             .publish(("campaign", "contributed"), (contributor.clone(), effective_amount));
+        env.events().publish(
+            ("campaign", "contributed"),
+            (contributor.clone(), effective_amount),
+        );
 
         // Update referral tally if referral provided
         if let Some(referrer) = referral {
             if referrer != contributor {
                 let referral_key = DataKey::ReferralTally(referrer.clone());
-                let current_tally: i128 = env
-                    .storage()
-                    .persistent()
-                    .get(&referral_key)
-                    .unwrap_or(0);
-                
+                let current_tally: i128 =
+                    env.storage().persistent().get(&referral_key).unwrap_or(0);
+
                 let new_tally = current_tally
                     .checked_add(effective_amount)
                     .ok_or(ContractError::Overflow)?;
-                
-                env.storage()
-                    .persistent()
-                    .set(&referral_key, &new_tally);
+
+                env.storage().persistent().set(&referral_key, &new_tally);
                 env.storage()
                     .persistent()
                     .extend_ttl(&referral_key, 100, 100);
 
                 // Emit referral event
-                env.events()
-                    .publish(("campaign", "referral"), (referrer, contributor, effective_amount));
+                env.events().publish(
+                    ("campaign", "referral"),
+                    (referrer, contributor, effective_amount),
+                );
             }
         }
 
