@@ -303,6 +303,8 @@ pub enum DataKey {
     BonusGoalDescription,
     /// Whether a bonus-goal reached event was emitted.
     BonusGoalReachedEmitted,
+    /// Total amount referred by each referrer address.
+    ReferralTally(Address),
 }
 
 // ── Rate Limiting ──────────────────────────────────────────────────────────
@@ -379,6 +381,7 @@ pub enum ContractError {
     PlatformAdmin,
     /// Verified status for a creator address.
     Verified(Address),
+    InvalidLimit = 11,
 }
 
 #[derive(Clone, PartialEq)]
@@ -767,6 +770,7 @@ impl CrowdfundContract {
         amount: i128,
         referral: Option<Address>,
     ) -> Result<(), ContractError> {
+    pub fn contribute(env: Env, contributor: Address, amount: i128, referral: Option<Address>) -> Result<(), ContractError> {
         // ── Rate limiting: enforce cooldown between contributions ──
         let now = env.ledger().timestamp();
         let last_time_key = DataKey::LastContributionTime(contributor.clone());
@@ -1065,6 +1069,7 @@ impl CrowdfundContract {
             ("campaign", "contributed"),
             (contributor.clone(), effective_amount),
         );
+            .publish(("campaign", "contributed"), (contributor.clone(), effective_amount));
 
         // Update referral tally if referral provided
         if let Some(referrer) = referral {
@@ -1078,6 +1083,19 @@ impl CrowdfundContract {
                     .ok_or(ContractError::Overflow)?;
 
                 env.storage().persistent().set(&referral_key, &new_tally);
+                let current_tally: i128 = env
+                    .storage()
+                    .persistent()
+                    .get(&referral_key)
+                    .unwrap_or(0);
+                
+                let new_tally = current_tally
+                    .checked_add(effective_amount)
+                    .ok_or(ContractError::Overflow)?;
+                
+                env.storage()
+                    .persistent()
+                    .set(&referral_key, &new_tally);
                 env.storage()
                     .persistent()
                     .extend_ttl(&referral_key, 100, 100);
@@ -1087,6 +1105,8 @@ impl CrowdfundContract {
                     ("campaign", "referral"),
                     (referrer, contributor, effective_amount),
                 );
+                env.events()
+                    .publish(("campaign", "referral"), (referrer, contributor, effective_amount));
             }
         }
 
