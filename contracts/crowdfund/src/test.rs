@@ -7293,4 +7293,232 @@ fn test_withdraw_after_deadline_panics() {
     env.ledger().set_timestamp(deadline + 1);
 
     client.withdraw_contribution(&contributor, &50_000); // should panic
+// ── DAO Protocol Integration Tests ─────────────────────────────────────────
+
+use soroban_sdk::{contract, contractimpl};
+
+/// ProxyCreator is a minimal DAO-like contract that can control a crowdfund campaign.
+#[contract]
+pub struct ProxyCreator;
+
+#[contractimpl]
+impl ProxyCreator {
+    pub fn init_campaign(
+        env: Env,
+        crowdfund_id: Address,
+        platform_admin: Address,
+        token: Address,
+        goal: i128,
+        deadline: u64,
+        min_contribution: i128,
+    ) {
+        let crowdfund_client = CrowdfundContractClient::new(&env, &crowdfund_id);
+        crowdfund_client.initialize(
+            &platform_admin,
+            &env.current_contract_address(),
+            &token,
+            &goal,
+            &deadline,
+            &min_contribution,
+        );
+    }
+
+    pub fn withdraw_campaign(env: Env, crowdfund_id: Address) {
+        let crowdfund_client = CrowdfundContractClient::new(&env, &crowdfund_id);
+        crowdfund_client.withdraw();
+    }
+
+    pub fn cancel_campaign(env: Env, crowdfund_id: Address) {
+        let crowdfund_client = CrowdfundContractClient::new(&env, &crowdfund_id);
+        crowdfund_client.cancel();
+    }
+}
+
+#[test]
+fn test_dao_withdraw_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let crowdfund_id = env.register(CrowdfundContract, ());
+    let crowdfund_client = CrowdfundContractClient::new(&env, &crowdfund_id);
+
+    let proxy_id = env.register(ProxyCreator, ());
+    let proxy_client = ProxyCreatorClient::new(&env, &proxy_id);
+
+    let token_admin = Address::generate(&env);
+    let token_contract_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_address = token_contract_id.address();
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_address);
+
+    let platform_admin = Address::generate(&env);
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let min_contribution: i128 = 1_000;
+
+    proxy_client.init_campaign(
+        &crowdfund_id,
+        &platform_admin,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+    );
+
+    let info = crowdfund_client.campaign_info();
+    assert_eq!(info.creator, proxy_id);
+
+    let contributor = Address::generate(&env);
+    token_admin_client.mint(&contributor, &1_000_000);
+    crowdfund_client.contribute(&contributor, &1_000_000);
+
+    env.ledger().set_timestamp(deadline + 1);
+
+    proxy_client.withdraw_campaign(&crowdfund_id);
+
+    assert_eq!(crowdfund_client.total_raised(), 0);
+    let token_client = token::Client::new(&env, &token_address);
+    assert_eq!(token_client.balance(&proxy_id), 1_000_000);
+}
+
+#[test]
+fn test_dao_cancel_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let crowdfund_id = env.register(CrowdfundContract, ());
+    let crowdfund_client = CrowdfundContractClient::new(&env, &crowdfund_id);
+
+    let proxy_id = env.register(ProxyCreator, ());
+    let proxy_client = ProxyCreatorClient::new(&env, &proxy_id);
+
+    let token_admin = Address::generate(&env);
+    let token_contract_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_address = token_contract_id.address();
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_address);
+
+    let platform_admin = Address::generate(&env);
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let min_contribution: i128 = 1_000;
+
+    proxy_client.init_campaign(
+        &crowdfund_id,
+        &platform_admin,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+    );
+
+    let contributor = Address::generate(&env);
+    token_admin_client.mint(&contributor, &500_000);
+    crowdfund_client.contribute(&contributor, &500_000);
+
+    proxy_client.cancel_campaign(&crowdfund_id);
+
+    assert_eq!(crowdfund_client.total_raised(), 0);
+    let token_client = token::Client::new(&env, &token_address);
+    assert_eq!(token_client.balance(&contributor), 500_000);
+}
+
+#[test]
+#[should_panic]
+fn test_dao_unauthorized_address_rejected() {
+    let env = Env::default();
+
+    let crowdfund_id = env.register(CrowdfundContract, ());
+    let crowdfund_client = CrowdfundContractClient::new(&env, &crowdfund_id);
+
+    let proxy_id = env.register(ProxyCreator, ());
+    let proxy_client = ProxyCreatorClient::new(&env, &proxy_id);
+
+    let token_admin = Address::generate(&env);
+    let token_contract_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_address = token_contract_id.address();
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_address);
+
+    let platform_admin = Address::generate(&env);
+    let unauthorized = Address::generate(&env);
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let min_contribution: i128 = 1_000;
+
+    env.mock_all_auths();
+
+    proxy_client.init_campaign(
+        &crowdfund_id,
+        &platform_admin,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+    );
+
+    let contributor = Address::generate(&env);
+    token_admin_client.mint(&contributor, &1_000_000);
+    crowdfund_client.contribute(&contributor, &1_000_000);
+    env.ledger().set_timestamp(deadline + 1);
+
+    env.mock_all_auths_allowing_non_root_auth();
+    env.set_auths(&[]);
+
+    crowdfund_client.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &unauthorized,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &crowdfund_id,
+            fn_name: "withdraw",
+            args: soroban_sdk::vec![&env],
+            sub_invokes: &[],
+        },
+    }]);
+
+    crowdfund_client.withdraw();
+}
+
+#[test]
+fn test_dao_contract_auth_chain_enforced() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let crowdfund_id = env.register(CrowdfundContract, ());
+    let crowdfund_client = CrowdfundContractClient::new(&env, &crowdfund_id);
+
+    let proxy_id = env.register(ProxyCreator, ());
+    let proxy_client = ProxyCreatorClient::new(&env, &proxy_id);
+
+    let token_admin = Address::generate(&env);
+    let token_contract_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_address = token_contract_id.address();
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_address);
+
+    let platform_admin = Address::generate(&env);
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let min_contribution: i128 = 1_000;
+
+    proxy_client.init_campaign(
+        &crowdfund_id,
+        &platform_admin,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+    );
+
+    let info = crowdfund_client.campaign_info();
+    assert_eq!(info.creator, proxy_id);
+    assert_eq!(info.goal, goal);
+    assert_eq!(info.deadline, deadline);
+
+    let contributor = Address::generate(&env);
+    token_admin_client.mint(&contributor, &1_000_000);
+    crowdfund_client.contribute(&contributor, &1_000_000);
+
+    env.ledger().set_timestamp(deadline + 1);
+
+    proxy_client.withdraw_campaign(&crowdfund_id);
+    assert_eq!(crowdfund_client.total_raised(), 0);
+
+    let token_client = token::Client::new(&env, &token_address);
+    assert_eq!(token_client.balance(&proxy_id), 1_000_000);
 }
