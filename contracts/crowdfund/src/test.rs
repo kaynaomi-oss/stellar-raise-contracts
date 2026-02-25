@@ -2294,6 +2294,177 @@ fn test_roadmap_empty_after_initialization() {
     assert_eq!(roadmap.len(), 0);
 }
 
+// ── Campaign Updates Tests ─────────────────────────────────────────────────
+
+#[test]
+fn test_post_single_update() {
+    let (env, client, creator, token_address, _admin) = setup_env();
+
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let hard_cap: i128 = goal * 2;
+    let min_contribution: i128 = 1_000;
+    client.initialize(
+        &creator,
+        &token_address,
+        &goal,
+        &hard_cap,
+        &deadline,
+        &min_contribution,
+        &default_title(&env),
+        &default_description(&env),
+        &None,
+    );
+
+    let update_text = soroban_sdk::String::from_str(&env, "Development milestone reached!");
+    client.post_update(&update_text);
+
+    let updates = client.get_updates();
+    assert_eq!(updates.len(), 1);
+    let (timestamp, text) = updates.get(0).unwrap();
+    assert_eq!(timestamp, env.ledger().timestamp());
+    assert_eq!(text, update_text);
+}
+
+#[test]
+fn test_post_multiple_updates_chronological_order() {
+    let (env, client, creator, token_address, _admin) = setup_env();
+
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let hard_cap: i128 = goal * 2;
+    let min_contribution: i128 = 1_000;
+    client.initialize(
+        &creator,
+        &token_address,
+        &goal,
+        &hard_cap,
+        &deadline,
+        &min_contribution,
+        &default_title(&env),
+        &default_description(&env),
+        &None,
+    );
+
+    let update1 = soroban_sdk::String::from_str(&env, "First update");
+    let time1 = env.ledger().timestamp();
+    client.post_update(&update1);
+
+    env.ledger().set_timestamp(time1 + 100);
+    let update2 = soroban_sdk::String::from_str(&env, "Second update");
+    let time2 = env.ledger().timestamp();
+    client.post_update(&update2);
+
+    env.ledger().set_timestamp(time2 + 200);
+    let update3 = soroban_sdk::String::from_str(&env, "Third update");
+    let time3 = env.ledger().timestamp();
+    client.post_update(&update3);
+
+    let updates = client.get_updates();
+    assert_eq!(updates.len(), 3);
+
+    let (ts1, text1) = updates.get(0).unwrap();
+    assert_eq!(ts1, time1);
+    assert_eq!(text1, update1);
+
+    let (ts2, text2) = updates.get(1).unwrap();
+    assert_eq!(ts2, time2);
+    assert_eq!(text2, update2);
+
+    let (ts3, text3) = updates.get(2).unwrap();
+    assert_eq!(ts3, time3);
+    assert_eq!(text3, update3);
+}
+
+#[test]
+#[should_panic]
+fn test_post_update_by_non_creator_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(CrowdfundContract, ());
+    let client = CrowdfundContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+    let token_contract_id = env.register_stellar_asset_contract_v2(token_admin);
+    let token_address = token_contract_id.address();
+
+    let creator = Address::generate(&env);
+    let non_creator = Address::generate(&env);
+
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let hard_cap: i128 = goal * 2;
+    let min_contribution: i128 = 1_000;
+    client.initialize(
+        &creator,
+        &token_address,
+        &goal,
+        &hard_cap,
+        &deadline,
+        &min_contribution,
+        &default_title(&env),
+        &default_description(&env),
+        &None,
+    );
+
+    // Set auth to non-creator
+    env.mock_all_auths_allowing_non_root_auth();
+    let update_text = soroban_sdk::String::from_str(&env, "Unauthorized update");
+
+    // This should panic because non_creator is not authorized
+    client.post_update(&update_text);
+}
+
+#[test]
+#[should_panic(expected = "update text cannot be empty")]
+fn test_post_update_with_empty_text_panics() {
+    let (env, client, creator, token_address, _admin) = setup_env();
+
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let hard_cap: i128 = goal * 2;
+    let min_contribution: i128 = 1_000;
+    client.initialize(
+        &creator,
+        &token_address,
+        &goal,
+        &hard_cap,
+        &deadline,
+        &min_contribution,
+        &default_title(&env),
+        &default_description(&env),
+        &None,
+    );
+
+    let empty_text = soroban_sdk::String::from_str(&env, "");
+    client.post_update(&empty_text); // should panic
+}
+
+#[test]
+fn test_get_updates_empty_after_initialization() {
+    let (env, client, creator, token_address, _admin) = setup_env();
+
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let hard_cap: i128 = goal * 2;
+    let min_contribution: i128 = 1_000;
+    client.initialize(
+        &creator,
+        &token_address,
+        &goal,
+        &hard_cap,
+        &deadline,
+        &min_contribution,
+        &default_title(&env),
+        &default_description(&env),
+        &None,
+    );
+
+    let updates = client.get_updates();
+    assert_eq!(updates.len(), 0);
+}
+
 // ── Campaign Info Tests ────────────────────────────────────────────────────
 
 #[test]

@@ -1670,6 +1670,43 @@ impl CrowdfundContract {
             .unwrap_or_else(|| Vec::new(&env))
     }
 
+    /// Post a campaign update (creator only).
+    ///
+    /// Records the current timestamp and the provided text. Rejects empty text.
+    /// Emits a (campaign, update_posted) event with timestamp and text.
+    pub fn post_update(env: Env, text: String) {
+        let creator: Address = env.storage().instance().get(&DataKey::Creator).unwrap();
+        creator.require_auth();
+
+        if text.is_empty() {
+            panic!("update text cannot be empty");
+        }
+
+        let timestamp = env.ledger().timestamp();
+
+        let mut updates: Vec<(u64, String)> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Updates)
+            .unwrap_or_else(|| Vec::new(&env));
+
+        updates.push_back((timestamp, text.clone()));
+
+        env.storage().instance().set(&DataKey::Updates, &updates);
+        env.events()
+            .publish(("campaign", "update_posted"), (timestamp, text));
+    }
+
+    /// Returns the full ordered list of campaign updates.
+    ///
+    /// Each entry is a tuple of (timestamp, update text) in chronological order.
+    pub fn get_updates(env: Env) -> Vec<(u64, String)> {
+        env.storage()
+            .instance()
+            .get(&DataKey::Updates)
+            .unwrap_or_else(|| Vec::new(&env))
+    }
+
     /// Add a stretch goal milestone to the campaign.
     ///
     /// Only the creator can add stretch goals. The milestone must be greater
