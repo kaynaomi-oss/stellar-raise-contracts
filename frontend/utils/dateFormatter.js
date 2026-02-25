@@ -65,5 +65,6 @@ export const formatRelativeTime = (timestamp) => {
  */
 export const isExpired = (timestamp) => {
   if (timestamp == null) return false;
+  if (!timestamp) return false;
   return Math.floor(Date.now() / 1000) > Number(timestamp);
 };
