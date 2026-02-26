@@ -1,0 +1,94 @@
+name: Testnet Smoke Test
+on:
+  workflow_dispatch: # manual trigger
+  schedule:
+    - cron: 0 2 * * * # nightly at 02:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    name: Deploy and verify on Soroban testnet
+    runs-on: ubuntu-latest
+
+    env:
+      NETWORK: testnet
+      NETWORK_PASSPHRASE: Test SDF Network ; September 2015
+      RPC_URL: https://soroban-testnet.stellar.org
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust and wasm32 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install soroban-cli
+        run: cargo install soroban-cli
+
+      - name: Build WASM binary
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Configure testnet identity from secret
+        env:
+          TESTNET_SECRET_KEY: ${{ secrets.TESTNET_SECRET_KEY }}
+        run: |
+          soroban keys add ci-deployer --secret-key $TESTNET_SECRET_KEY
+
+      - name: Fund testnet account via Friendbot
+        run: |
+          soroban keys fund ci-deployer --network $NETWORK
+
+      - name: Deploy contract to testnet
+        id: deploy
+        run: |
+          CONTRACT_ID=$(soroban contract deploy \
+            --wasm target/wasm32-unknown-unknown/release/crowdfund.wasm \
+            --network $NETWORK \
+            --source ci-deployer)
+          echo "CONTRACT_ID=$CONTRACT_ID" >> $GITHUB_ENV
+          echo "Deployed contract: $CONTRACT_ID"
+
+      - name: Initialize campaign
+        run: |
+          DEADLINE=$(( $(date +%s) + 86400 ))
+          soroban contract invoke \
+            --id $CONTRACT_ID \
+            --network $NETWORK \
+            --source ci-deployer \
+            -- initialize \
+            --creator $(soroban keys address ci-deployer) \
+            --token CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC \
+            --goal 1000 \
+            --deadline $DEADLINE
+
+      - name: Assert is_initialized returns true
+        run: |
+          RESULT=$(soroban contract invoke \
+            --id $CONTRACT_ID \
+            --network $NETWORK \
+            --source ci-deployer \
+            -- is_initialized)
+          echo "is_initialized: $RESULT"
+          if [ "$RESULT" != "true" ]; then
+            echo "Smoke test FAILED: is_initialized returned $RESULT"
+            exit 1
+          fi
+
+      - name: Query and log campaign state
+        run: |
+          soroban contract invoke \
+            --id $CONTRACT_ID \
+            --network $NETWORK \
+            --source ci-deployer \
+            -- get_campaign_info
+
+      - name: Log deployed contract address for reference
+        run: |
+          echo "Testnet contract address: $CONTRACT_ID"
+          echo "Contract will expire naturally via TTL — no manual cleanup required."

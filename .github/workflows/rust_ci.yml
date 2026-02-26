@@ -1,10 +1,14 @@
 name: Rust CI
 
 on:
-  pull_request:
-    branches: [main]
   push:
-    branches: [main]
+    branches:
+      - develop
+      - main
+  pull_request:
+    branches:
+      - develop
+      - main
 
 env:
   CARGO_TERM_COLOR: always
@@ -30,14 +34,30 @@ jobs:
           targets: wasm32-unknown-unknown
           components: clippy, rustfmt
 
-      - name: Cache cargo registry & build
-        uses: actions/cache@v4
+      # ── Cache ────────────────────────────────────────────
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          # Cache key prefix — increment to bust cache manually
+          prefix-key: "v1-rust"
+          # Cache the registry and target directories
+          shared-key: "crowdfund"
+          cache-targets: true
+          cache-all-crates: true
+
+      # ── Alternative: using actions/cache directly ────────
+      # Uncomment below and remove rust-cache above if preferred:
+      #
+      # - name: Cache cargo registry
+      #   uses: actions/cache@v3
+      #   with:
+      #     path: |
+      #       ~/.cargo/registry
+      #       ~/.cargo/git
+      #       target/
+      #     key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-cargo-
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -45,8 +65,36 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Run tests
+      - name: Run tests including property-based tests
+        env:
+          PROPTEST_CASES: 1000
         run: cargo test --workspace
+
+      - name: Generate Rustdoc
+        run: cargo doc --no-deps --workspace
 
       - name: Build WASM (release)
         run: cargo build --release --target wasm32-unknown-unknown
+
+      - name: Report WASM binary size
+        run: ls -lh target/wasm32-unknown-unknown/release/crowdfund.wasm
+
+      - name: Install wasm-opt (Binaryen)
+        run: sudo apt-get install -y binaryen
+
+      - name: Optimize WASM with wasm-opt
+        run: |
+          wasm-opt -Oz \
+            target/wasm32-unknown-unknown/release/crowdfund.wasm \
+            -o target/wasm32-unknown-unknown/release/crowdfund.opt.wasm
+
+      - name: Fail if WASM exceeds 256 KB
+        run: |
+          SIZE=$(stat -c%s target/wasm32-unknown-unknown/release/crowdfund.opt.wasm)
+          MAX=$((256 * 1024))
+          if [ "$SIZE" -gt "$MAX" ]; then
+            echo "WASM binary too large: $SIZE bytes (max $MAX bytes)"
+            exit 1
+          else
+            echo "WASM size OK: $SIZE bytes"
+          fi
