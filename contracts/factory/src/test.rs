@@ -1,6 +1,7 @@
 use crate::{FactoryContract, FactoryContractClient};
 use soroban_sdk::{testutils::Address as _, token, Address, Env};
 #![cfg(test)]
+#![allow(clippy::too_many_arguments)]
 
 use crate::{FactoryContract, FactoryContractClient};
 use soroban_sdk::{testutils::Address as _, token, Address, Env};
@@ -22,7 +23,7 @@ fn create_token_contract<'a>(
     admin: &Address,
 ) -> (Address, token::StellarAssetClient<'a>) {
 mod crowdfund_wasm {
-    soroban_sdk::contractimport!(file = "../../target/wasm32v1-none/release/crowdfund.wasm");
+    soroban_sdk::contractimport!(file = "wasm/crowdfund.wasm");
 }
 
 fn create_token_contract<'a>(

@@ -351,7 +351,7 @@ mod tests {
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, Address, BytesN, Env, IntoVal, Symbol, Vec,
+    contract, contractimpl, contracttype, Address, BytesN, Env, IntoVal, String, Symbol, Vec,
 };
 
 #[cfg(test)]
@@ -413,6 +413,11 @@ impl FactoryContract {
                 deadline.into_val(&env),
                 min_contribution.into_val(&env),
                 no_platform_config.into_val(&env),
+                deadline.into_val(&env),
+                1_i128.into_val(&env),
+                Option::<i128>::None.into_val(&env),
+                Option::<i128>::None.into_val(&env),
+                Option::<String>::None.into_val(&env)
             ],
         );
 
