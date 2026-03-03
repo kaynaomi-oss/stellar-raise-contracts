@@ -1693,7 +1693,6 @@ proptest! {
         let contributor = Address::generate(&env);
         mint_to(&env, &token_address, &admin, &contributor, contribution_amount);
 
-        // Test 3.2: Valid contribution before deadline works correctly
         client.contribute(&contributor, &contribution_amount);
 
         prop_assert_eq!(client.total_raised(), contribution_amount);
@@ -2222,8 +2221,10 @@ fn test_contribute_below_minimum_panics() {
 }
 
 #[test]
+    let creator = Address::generate(&env);
 
-// ── Minimum Contribution Tests ─────────────────────────────────────────────
+    client.cancel();
+}
 
 #[test]
 #[should_panic(expected = "amount below minimum")]
@@ -2378,6 +2379,65 @@ fn test_stats_single_contributor() {
     mint_to(&env, &token_address, &admin, &contributor, 10_000);
 
     client.contribute(&contributor, &10_000);
+
+    assert_eq!(client.total_raised(), 10_000);
+    assert_eq!(client.contribution(&contributor), 10_000);
+}
+
+#[test]
+#[should_panic(expected = "campaign is not active")]
+fn test_double_withdraw_panics() {
+    let (env, client, creator, token_address, admin) = setup_env();
+
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let min_contribution: i128 = 10_000;
+    client.initialize(
+        &creator,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+        &default_title(&env),
+        &default_description(&env),
+        &None,
+    );
+
+    let bronze = soroban_sdk::String::from_str(&env, "Bronze");
+    let silver = soroban_sdk::String::from_str(&env, "Silver");
+    let gold = soroban_sdk::String::from_str(&env, "Gold");
+    client.add_reward_tier(&creator, &bronze, &10_000);
+    client.add_reward_tier(&creator, &silver, &100_000);
+    client.add_reward_tier(&creator, &gold, &500_000);
+
+    let contributor = Address::generate(&env);
+    mint_to(&env, &token_address, &admin, &contributor, 50_000);
+    client.contribute(&contributor, &50_000, &None);
+
+    client.contribute(&contributor, &5_000); // should panic
+}
+
+#[test]
+fn test_contribute_exact_minimum() {
+    let (env, client, creator, token_address, admin) = setup_env();
+
+    let deadline = env.ledger().timestamp() + 3600;
+    let goal: i128 = 1_000_000;
+    let min_contribution: i128 = 10_000;
+    client.initialize(
+        &creator,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+        &default_title(&env),
+        &default_description(&env),
+        &None,
+    );
+
+    let contributor = Address::generate(&env);
+    mint_to(&env, &token_address, &admin, &contributor, 600_000);
+    client.contribute(&contributor, &600_000, &None);
 
     assert_eq!(client.total_raised(), 10_000);
     assert_eq!(client.contribution(&contributor), 10_000);
