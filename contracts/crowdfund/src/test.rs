@@ -1151,7 +1151,10 @@ fn test_withdraw_goal_not_reached_panics() {
     mint_to(&env, &token_address, &admin, &contributor, 500_000);
 
     let result = client.try_contribute(&contributor, &500_000);
-    assert_eq!(result.unwrap_err().unwrap(), crate::ContractError::CampaignEnded);
+    assert_eq!(
+        result.unwrap_err().unwrap(),
+        crate::ContractError::CampaignEnded
+    );
 }
 
 #[test]
@@ -1448,8 +1451,8 @@ fn test_bug_condition_exploration_all_error_conditions_panic() {
         
 
         client.initialize(
-        &admin,
-        &creator,
+            &admin,
+            &creator,
             &token_address,
             &goal,
             &(goal * 2),
@@ -1468,8 +1471,8 @@ fn test_bug_condition_exploration_all_error_conditions_panic() {
             &None,
         );
         let result = client.try_initialize(
-        &admin,
-        &creator,
+            &admin,
+            &creator,
             &token_address,
             &goal,
             &(goal * 2),
@@ -1505,8 +1508,8 @@ fn test_bug_condition_exploration_all_error_conditions_panic() {
         client.initialize(&creator, &token_address, &goal, &deadline, &1_000, &None);
         client.initialize(&creator, &token_address, &goal, &(goal * 2), &deadline, &1_000, &None);
         client.initialize(
-        &admin,
-        &creator,
+            &admin,
+            &creator,
             &token_address,
             &goal,
             &(goal * 2),
@@ -1532,7 +1535,10 @@ fn test_bug_condition_exploration_all_error_conditions_panic() {
         let result = client.try_contribute(&contributor, &500_000);
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().unwrap(), crate::ContractError::CampaignEnded);
+        assert_eq!(
+            result.unwrap_err().unwrap(),
+            crate::ContractError::CampaignEnded
+        );
     }
 
     // Test 3: Early withdrawal
@@ -1545,8 +1551,8 @@ fn test_bug_condition_exploration_all_error_conditions_panic() {
         client.initialize(&creator, &token_address, &goal, &deadline, &1_000, &None);
         client.initialize(&creator, &token_address, &goal, &(goal * 2), &deadline, &1_000, &None);
         client.initialize(
-        &admin,
-        &creator,
+            &admin,
+            &creator,
             &token_address,
             &goal,
             &(goal * 2),
@@ -1588,8 +1594,8 @@ fn test_bug_condition_exploration_all_error_conditions_panic() {
         client.initialize(&creator, &token_address, &goal, &deadline, &1_000, &None);
         client.initialize(&creator, &token_address, &goal, &(goal * 2), &deadline, &1_000, &None);
         client.initialize(
-        &admin,
-        &creator,
+            &admin,
+            &creator,
             &token_address,
             &goal,
             &(goal * 2),
@@ -1616,7 +1622,10 @@ fn test_bug_condition_exploration_all_error_conditions_panic() {
         let result = client.try_withdraw();
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().unwrap(), crate::ContractError::GoalNotReached);
+        assert_eq!(
+            result.unwrap_err().unwrap(),
+            crate::ContractError::GoalNotReached
+        );
     }
 
     // Test 5: Early refund
@@ -1625,8 +1634,8 @@ fn test_bug_condition_exploration_all_error_conditions_panic() {
         let deadline = env.ledger().timestamp() + 3600;
         let goal: i128 = 1_000_000;
         client.initialize(
-        &admin,
-        &creator,
+            &admin,
+            &creator,
             &token_address,
             &goal,
             &deadline,
@@ -1691,8 +1700,8 @@ fn test_bug_condition_exploration_all_error_conditions_panic() {
         client.initialize(&creator, &token_address, &goal, &deadline, &1_000, &None);
         client.initialize(&creator, &token_address, &goal, &(goal * 2), &deadline, &1_000, &None);
         client.initialize(
-        &admin,
-        &creator,
+            &admin,
+            &creator,
             &token_address,
             &goal,
             &(goal * 2),
@@ -1721,7 +1730,10 @@ fn test_bug_condition_exploration_all_error_conditions_panic() {
         let result = client.try_refund();
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().unwrap(), crate::ContractError::GoalReached);
+        assert_eq!(
+            result.unwrap_err().unwrap(),
+            crate::ContractError::GoalReached
+        );
     }
 }
 
@@ -8502,7 +8514,15 @@ fn test_auto_extension_triggered() {
 
     client.initialize(
         &admin,
-        &creator, &token_address, &goal, &deadline, &min_contribution, &None, &Some(auto_extension_threshold), &None);
+        &creator,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+        &None,
+        &Some(auto_extension_threshold),
+        &None,
+    );
 
     // Move to within the auto-extension window (last hour).
     env.ledger().set_timestamp(deadline - 1800); // 30 minutes before deadline
@@ -8527,7 +8547,15 @@ fn test_auto_extension_not_triggered_below_threshold() {
 
     client.initialize(
         &admin,
-        &creator, &token_address, &goal, &deadline, &min_contribution, &None, &Some(auto_extension_threshold), &None);
+        &creator,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+        &None,
+        &Some(auto_extension_threshold),
+        &None,
+    );
 
     // Move to within the auto-extension window.
     env.ledger().set_timestamp(deadline - 1800);
@@ -8551,7 +8579,15 @@ fn test_auto_extension_not_triggered_outside_window() {
 
     client.initialize(
         &admin,
-        &creator, &token_address, &goal, &deadline, &min_contribution, &None, &Some(auto_extension_threshold), &None);
+        &creator,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+        &None,
+        &Some(auto_extension_threshold),
+        &None,
+    );
 
     // Contribute outside the auto-extension window (more than 1 hour before deadline).
     env.ledger().set_timestamp(deadline - 5000);
@@ -8575,7 +8611,15 @@ fn test_auto_extension_cap_prevents_infinite_extension() {
 
     client.initialize(
         &admin,
-        &creator, &token_address, &goal, &deadline, &min_contribution, &None, &Some(auto_extension_threshold), &None);
+        &creator,
+        &token_address,
+        &goal,
+        &deadline,
+        &min_contribution,
+        &None,
+        &Some(auto_extension_threshold),
+        &None,
+    );
 
     // Trigger 5 extensions (the maximum).
     for _i in 0..5 {
@@ -8654,4 +8698,3 @@ fn test_initialize_with_invalid_bonus_goal_fails() {
         &None,
     );
 }
-
