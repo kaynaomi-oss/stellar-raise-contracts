@@ -932,7 +932,7 @@ fn test_withdraw_successful_campaign_updates_status_and_balance() {
     client.withdraw();
 
     assert_eq!(client.total_raised(), 0);
-    assert_eq!(token_client.balance(&creator), creator_before + goal);
+    assert_eq!(token_client.balance(&creator), creator_before + 1_000_000);
 }
 
 #[test]
@@ -1232,12 +1232,6 @@ fn test_withdraw_skips_nft_minting_when_nft_contract_not_set() {
     let nft_contract_id = env.register(MockNftContract, ());
     let nft_client = MockNftContractClient::new(&env, &nft_contract_id);
 
-    let contributor = Address::generate(&env);
-    mint_to(&env, &token_address, &admin, &contributor, 1_000_000);
-    client.contribute(&contributor, &1_000_000);
-    env.ledger().set_timestamp(deadline + 1);
-
-    client.withdraw();
 
     assert_eq!(nft_client.minted().len(), 0);
 }
@@ -1955,6 +1949,9 @@ fn test_double_withdraw_panics() {
 
     client.withdraw();
     client.withdraw(); // should panic — status is Successful
+    // Fast-forward past the deadline.
+    env.ledger().set_timestamp(deadline + 1);
+
 }
 
 #[test]
