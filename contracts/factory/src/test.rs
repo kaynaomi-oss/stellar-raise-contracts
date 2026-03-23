@@ -32,6 +32,7 @@ mod crowdfund_wasm {
     soroban_sdk::contractimport!(
         file = "../../contracts/factory/wasm/crowdfund.wasm"
     );
+    soroban_sdk::contractimport!(file = "../../contracts/factory/wasm/crowdfund.wasm");
 }
 
 fn create_token_contract<'a>(
