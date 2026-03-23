@@ -77,6 +77,8 @@ mod auth_tests;
 mod refund_single_token_test;
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod admin_upgrade_mechanism_test;
 
 #[cfg(test)]
 pub mod proptest_generator_boundary;
