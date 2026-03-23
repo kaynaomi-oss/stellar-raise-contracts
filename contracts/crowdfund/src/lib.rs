@@ -82,6 +82,7 @@ mod proptest_generator_boundary_tests;
 mod test;
 #[cfg(test)]
 mod admin_upgrade_mechanism_test;
+mod stellar_token_minter_test;
 
 #[cfg(test)]
 pub mod proptest_generator_boundary;
