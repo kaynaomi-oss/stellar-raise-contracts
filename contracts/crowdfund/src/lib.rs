@@ -70,6 +70,8 @@ mod contribute_error_handling_tests;
 mod npm_package_lock_test;
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod auth_tests;
 
 #[cfg(test)]
 pub mod proptest_generator_boundary;
@@ -520,9 +522,10 @@ impl CrowdfundContract {
     /// * `deadline`                  – The campaign deadline as a ledger timestamp.
     /// * `min_contribution`          – The minimum contribution amount.
     /// * `auto_extension_threshold`  – Optional minimum contribution to trigger auto-extension.
+    /// * If bonus goal is not greater than the primary goal.
     pub fn initialize(
         env: Env,
-        _admin: Address,
+        admin: Address,
         creator: Address,
         token: Address,
         goal: i128,
@@ -577,6 +580,9 @@ impl CrowdfundContract {
 
         creator.require_auth();
 
+        // Store admin for upgrade authorization.
+        env.storage().instance().set(&DataKey::Admin, &admin);
+
         if let Some(ref config) = platform_config {
             if config.fee_bps > 10_000 {
                 panic!("platform fee cannot exceed 100%");
@@ -612,13 +618,6 @@ impl CrowdfundContract {
 
                 env.storage().instance().set(&DataKey::FeeTiers, tiers);
             }
-        if let Some(bg) = bonus_goal {
-            if bg <= goal {
-                panic!("bonus goal must be greater than primary goal");
-            }
-            env.storage().instance().set(&DataKey::BonusGoal, &bg);
-        }
-
         if let Some(bg) = bonus_goal {
             if bg <= goal {
                 panic!("bonus goal must be greater than primary goal");
@@ -674,9 +673,6 @@ impl CrowdfundContract {
         }
         env.storage().instance().set(&DataKey::TotalRaised, &0i128);
         env.storage().instance().set(&DataKey::TotalRaised, &0i128);
-        env.storage()
-            .instance()
-            .set(&DataKey::BonusGoalReachedEmitted, &false);
         env.storage()
             .instance()
             .set(&DataKey::BonusGoalReachedEmitted, &false);
@@ -784,6 +780,12 @@ impl CrowdfundContract {
         for address in addresses.iter() {
             env.storage().instance().set(&DataKey::Whitelist(address), &true);
         }
+    /// Returns the list of all contributor addresses.
+    pub fn contributors(env: Env) -> Vec<Address> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Contributors)
+            .unwrap_or(Vec::new(&env))
     }
 
     /// Contribute tokens to the campaign.
