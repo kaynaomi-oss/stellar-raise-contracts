@@ -46,6 +46,8 @@ import {
   cssVar,
   cssCalc,
   ALLOWED_CSS_VARIABLES,
+  CssVariablesMap,
+  useCssVariable,
 } from './css_variables_usage';
 
 describe('CssVariableValidator', () => {
@@ -347,6 +349,82 @@ describe('Security Edge Cases', () => {
     expect(() => {
       CssVariableValidator.isValidValue("@import url('https://evil.com')");
     }).toThrow(CssVariablesError);
+  });
+});
+
+describe('CssVariablesUsage setMultiple', () => {
+  let container: HTMLElement;
+  let cssVars: CssVariablesUsage;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    cssVars = new CssVariablesUsage(container);
+  });
+
+  afterEach(() => {
+    document.body.removeChild(container);
+  });
+
+  describe('setMultiple', () => {
+    it('should set multiple CSS variables at once', () => {
+      cssVars.setMultiple({
+        '--color-primary-blue': '#ff0000',
+        '--space-4': '2rem',
+      });
+      expect(container.style.getPropertyValue('--color-primary-blue')).toBe('#ff0000');
+      expect(container.style.getPropertyValue('--space-4')).toBe('2rem');
+    });
+
+    it('should skip undefined values in setMultiple', () => {
+      container.style.setProperty('--color-primary-blue', '#0066FF');
+      cssVars.setMultiple({
+        '--color-primary-blue': '#ff0000',
+        '--space-4': undefined as unknown as string,
+      });
+      expect(container.style.getPropertyValue('--color-primary-blue')).toBe('#ff0000');
+      expect(container.style.getPropertyValue('--space-4')).toBe('');
+    });
+
+    it('should throw error for invalid variable name in setMultiple', () => {
+      // Using type assertion to test runtime validation of invalid keys
+      const invalidMap = { '--invalid-var': 'value' } as CssVariablesMap;
+      expect(() => {
+        cssVars.setMultiple(invalidMap);
+      }).toThrow(CssVariablesError);
+    });
+
+    it('should throw error for dangerous value in setMultiple', () => {
+      expect(() => {
+        cssVars.setMultiple({
+          '--color-primary-blue': 'url(https://evil.com)',
+        });
+      }).toThrow(CssVariablesError);
+    });
+
+    it('should handle empty object in setMultiple', () => {
+      expect(() => {
+        cssVars.setMultiple({});
+      }).not.toThrow();
+    });
+  });
+});
+
+describe('useCssVariable hook', () => {
+  it('should be defined as a function', () => {
+    expect(typeof useCssVariable).toBe('function');
+  });
+
+  it('should be callable with valid variable name', () => {
+    const container = document.createElement('div');
+    container.style.setProperty('--color-primary-blue', '#0066FF');
+    document.body.appendChild(container);
+
+    const cssVars = new CssVariablesUsage(container);
+    const result = cssVars.get('--color-primary-blue');
+    expect(result).toBe('#0066FF');
+
+    document.body.removeChild(container);
   });
 });
 
