@@ -72,6 +72,9 @@ mod contribute_error_handling_tests;
 mod npm_package_lock_test;
 #[cfg(test)]
 mod auth_tests;
+pub mod contribute_error_handling;
+#[cfg(test)]
+mod contribute_error_handling_tests;
 #[cfg(test)]
 #[path = "refund_single_token.test.rs"]
 mod refund_single_token_test;
