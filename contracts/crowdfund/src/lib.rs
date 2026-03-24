@@ -91,6 +91,9 @@ mod test;
 mod admin_upgrade_mechanism_test;
 mod stellar_token_minter_test;
 mod withdraw_event_emission_test;
+mod refund_single_token_tests;
+#[cfg(test)]
+mod stellar_token_minter_test;
 
 #[cfg(test)]
 pub mod proptest_generator_boundary;
