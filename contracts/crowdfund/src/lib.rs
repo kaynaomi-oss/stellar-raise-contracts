@@ -70,6 +70,8 @@ mod contribute_error_handling_tests;
 #[cfg(test)]
 #[path = "npm_package_lock_test.rs"]
 mod npm_package_lock_test;
+pub mod soroban_sdk_minor;
+
 #[cfg(test)]
 mod auth_tests;
 pub mod contribute_error_handling;
@@ -81,6 +83,8 @@ mod refund_single_token_test;
 mod proptest_generator_boundary;
 #[cfg(test)]
 mod proptest_generator_boundary_tests;
+#[cfg(test)]
+mod soroban_sdk_minor_tests;
 #[cfg(test)]
 mod test;
 #[cfg(test)]
