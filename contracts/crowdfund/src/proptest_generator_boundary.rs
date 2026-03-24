@@ -163,7 +163,7 @@ pub fn is_valid_goal(goal: i128) -> bool {
 /// min_contribution must be in [MIN_CONTRIBUTION_FLOOR, goal].
 #[inline]
 pub fn is_valid_min_contribution(min_contribution: i128, goal: i128) -> bool {
-    min_contribution >= MIN_CONTRIBUTION_FLOOR && min_contribution <= goal
+    (MIN_CONTRIBUTION_FLOOR..=goal).contains(&min_contribution)
 }
 
 /// Returns `true` if `amount >= min_contribution`.
