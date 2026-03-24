@@ -74,6 +74,39 @@ pub struct ComplianceRule {
     pub enabled: bool,
     pub severity: String, // "error", "warning", "info"
 }
+//! # Cargo.toml Rust Dependency Review
+//!
+//! This module documents the dependency policy for the crowdfund contract and
+//! provides compile-time constants and runtime helpers that make the pinned
+//! versions auditable on-chain.
+//!
+//! ## Dependency Policy
+//!
+//! | Crate        | Previous  | Current   | Scope       | Reason for change          |
+//! |--------------|-----------|-----------|-------------|----------------------------|
+//! | `soroban-sdk`| `22.0.1`  | `22.0.11` | workspace   | Latest 22.x patch; bug fixes and testutils improvements |
+//! | `proptest`   | `1.4`     | `1.11.0`  | dev only    | Latest stable; improved shrinking and arbitrary derives |
+//!
+//! ## Deprecation Notes
+//!
+//! - `soroban-sdk 22.0.1` is superseded by `22.0.11`. The older patch had
+//!   known issues with `extend_ttl` edge cases in the test environment.
+//! - `proptest 1.4` is superseded by `1.11.0`. The older version had
+//!   deprecated `prop_compose!` macro internals.
+//!
+//! ## Security Assumptions
+//!
+//! 1. **Patch-only bump** — `22.0.1 → 22.0.11` is a patch release; no
+//!    storage-layout or ABI changes are introduced.
+//! 2. **Dev-only proptest** — `proptest` is a `[dev-dependencies]` entry and
+//!    is never compiled into the WASM binary; it has zero on-chain footprint.
+//! 3. **No transitive breaking changes** — all transitive dependencies
+//!    (`soroban-env-host`, `stellar-xdr`, etc.) are resolved by Cargo's
+//!    semver resolver and remain within the 22.x compatibility window.
+//! 4. **`overflow-checks = true`** in the release profile is independent of
+//!    the SDK version and remains enforced.
+
+#![allow(dead_code, missing_docs)]
 
 // ── Pinned version constants ──────────────────────────────────────────────────
 
@@ -83,6 +116,7 @@ pub struct ComplianceRule {
 ///         a documentation error, not a functional change.
 /// @dev Security level: 2 (medium - core SDK dependency)
 pub const SOROBAN_SDK_VERSION: &str = "22.1.0";
+pub const SOROBAN_SDK_VERSION: &str = "22.0.11";
 
 /// The previous soroban-sdk version, retained for audit trail.
 ///
@@ -90,12 +124,15 @@ pub const SOROBAN_SDK_VERSION: &str = "22.1.0";
 /// @notice Security level: 2 (medium - core SDK dependency)
 #[deprecated(since = "22.1.0", note = "Upgrade to soroban-sdk 22.1.0")]
 pub const SOROBAN_SDK_VERSION_DEPRECATED: &str = "22.0.11";
+#[deprecated(since = "22.0.11", note = "Upgrade to soroban-sdk 22.0.11")]
+pub const SOROBAN_SDK_VERSION_DEPRECATED: &str = "22.0.1";
 
 /// The proptest version used in dev-dependencies.
 ///
 /// @dev Not compiled into the WASM binary.
 /// @notice Security level: 1 (low - dev-only dependency)
 pub const PROPTEST_VERSION: &str = "1.5.0";
+pub const PROPTEST_VERSION: &str = "1.11.0";
 
 /// The previous proptest version, retained for audit trail.
 ///
@@ -106,6 +143,10 @@ pub const PROPTEST_VERSION: &str = "1.5.0";
 pub const PROPTEST_VERSION_DEPRECATED: &str = "1.4";
 
 // ── Legacy Dependency Record (for backward compatibility) ───────────────────────
+#[deprecated(since = "1.11.0", note = "Upgrade to proptest 1.11.0")]
+pub const PROPTEST_VERSION_DEPRECATED: &str = "1.4";
+
+// ── Dependency record ─────────────────────────────────────────────────────────
 
 /// Represents a single Cargo dependency entry for audit purposes.
 #[derive(Clone, Debug, PartialEq)]
@@ -607,4 +648,7 @@ impl CargoTomlRust {
 
         results
     }
+}
+pub fn all_deprecated_versions_replaced() -> bool {
+    audited_dependencies().iter().all(|d| d.deprecated_previous)
 }

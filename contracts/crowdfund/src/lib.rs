@@ -17,6 +17,11 @@ use soroban_sdk::{
 };
 use soroban_sdk::{contract, contractimpl, contracterror, contracttype, token, Address, Env, String, Symbol, Vec};
 mod refund_single_token;
+pub mod cargo_toml_rust;
+#[cfg(test)]
+#[path = "cargo_toml_rust.test.rs"]
+mod cargo_toml_rust_test;
+
 pub mod contract_state_size;
 #[cfg(test)]
 mod contract_state_size_test;

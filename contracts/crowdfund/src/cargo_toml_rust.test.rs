@@ -14,12 +14,33 @@ use crate::cargo_toml_rust::{
     SOROBAN_SDK_VERSION, SOROBAN_SDK_VERSION_DEPRECATED,
 };
 use soroban_sdk::{Env, Map, String, Vec};
+//! Tests for `cargo_toml_rust` — dependency policy enforcement.
+//!
+//! ## Security notes
+//! - Version constants are pinned; any accidental change is caught immediately.
+//! - `all_deprecated_versions_replaced` guards against re-introducing old deps.
+//! - `dev_only` flag on proptest confirms it never enters the WASM binary.
+
+#![cfg(test)]
+
+use crate::cargo_toml_rust::{
+    all_deprecated_versions_replaced, audited_dependencies, DepRecord, PROPTEST_VERSION,
+    PROPTEST_VERSION_DEPRECATED, SOROBAN_SDK_VERSION, SOROBAN_SDK_VERSION_DEPRECATED,
+};
 
 // ── Version constant stability ────────────────────────────────────────────────
 
 #[test]
 fn soroban_sdk_version_is_pinned() {
     assert_eq!(SOROBAN_SDK_VERSION, "22.1.0");
+    assert_eq!(SOROBAN_SDK_VERSION, "22.0.11");
+}
+
+#[test]
+fn soroban_sdk_deprecated_version_is_recorded() {
+    #[allow(deprecated)]
+    let v = SOROBAN_SDK_VERSION_DEPRECATED;
+    assert_eq!(v, "22.0.1");
 }
 
 #[test]
@@ -28,6 +49,17 @@ fn proptest_version_is_pinned() {
 }
 
 // ── audited_dependencies (backward compatibility) ────────────────────────────────
+    assert_eq!(PROPTEST_VERSION, "1.11.0");
+}
+
+#[test]
+fn proptest_deprecated_version_is_recorded() {
+    #[allow(deprecated)]
+    let v = PROPTEST_VERSION_DEPRECATED;
+    assert_eq!(v, "1.4");
+}
+
+// ── audited_dependencies ──────────────────────────────────────────────────────
 
 #[test]
 fn audited_dependencies_has_two_entries() {
@@ -85,6 +117,7 @@ fn all_deprecated_versions_replaced_returns_true() {
 
 #[test]
 fn dep_record_with_no_deprecated_previous_fails_check() {
+    // Simulate a dep that has NOT replaced its deprecated predecessor.
     let dep = DepRecord {
         name: "some-crate",
         version: "1.0.0",
@@ -101,12 +134,14 @@ fn dep_record_equality() {
     let a = DepRecord {
         name: "soroban-sdk",
         version: "22.1.0",
+        version: "22.0.11",
         dev_only: false,
         deprecated_previous: true,
     };
     let b = DepRecord {
         name: "soroban-sdk",
         version: "22.1.0",
+        version: "22.0.11",
         dev_only: false,
         deprecated_previous: true,
     };
@@ -118,12 +153,14 @@ fn dep_record_inequality_on_version() {
     let a = DepRecord {
         name: "soroban-sdk",
         version: "22.0.11",
+        version: "22.0.1",
         dev_only: false,
         deprecated_previous: true,
     };
     let b = DepRecord {
         name: "soroban-sdk",
         version: "22.1.0",
+        version: "22.0.11",
         dev_only: false,
         deprecated_previous: true,
     };
