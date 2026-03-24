@@ -270,5 +270,24 @@
     "u32",
     "i128",
     "u64"
+  "words": [
+    "NatSpec",
+    "jsdom",
+    "cssVars",
+    "Phantomcall",
+    "Stellar",
+    "DApp",
+    "frontend",
+    "tsx",
+    "useCssVariable",
+    "Stellar-Raise"
+  ],
+  "ignorePaths": [
+    "node_modules/**",
+    "coverage/**",
+    "**/*.log",
+    "pnpm-lock.yaml",
+    "package-lock.json",
+    "gh_2.45.0_linux_amd64/**"
   ]
 }
