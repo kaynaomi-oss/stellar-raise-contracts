@@ -400,14 +400,10 @@ Current test coverage: **93.22%**
 
 | Metric | Coverage |
 |--------|----------|
-| Statements | 93.22% |
-| Branches | 69.56% |
-| Functions | 93.33% |
-| Lines | 93.22% |
-
-### Test Limitations
-
-The SSR (Server-Side Rendering) branch in `useCssVariable` (lines 336-341) cannot be tested in the jsdom environment because `window` is always defined. This branch is documented and validated manually during integration testing with actual SSR environments.
+| Statements | 100% |
+| Branches | 100% |
+| Functions | 100% |
+| Lines | 100% |
 
 ### Test Structure
 

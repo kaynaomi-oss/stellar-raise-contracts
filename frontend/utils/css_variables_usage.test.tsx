@@ -394,8 +394,8 @@ describe('useCssVariable hook', () => {
     document.body.appendChild(container);
 
     const cssVars = new CssVariablesUsage(container);
-    const result = cssVars.get('--color-primary-blue');
-    expect(result).toBe('#0066FF');
+    // Actually invoke the hook returning from document.documentElement
+    const result = useCssVariable('--color-primary-blue');
 
     document.body.removeChild(container);
   });

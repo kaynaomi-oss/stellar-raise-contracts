@@ -6,11 +6,14 @@ use soroban_sdk::{
     contract, contractclient, contractimpl, contracttype, token, Address, Env, IntoVal, String,
     Symbol, Vec,
 };
-mod refund_single_token;
+pub mod refund_single_token;
 use refund_single_token::refund_single_transfer;
 
 #[cfg(test)]
 mod auth_tests;
+pub mod campaign_goal_minimum;
+#[cfg(test)]
+mod campaign_goal_minimum_test;
 pub mod contribute_error_handling;
 #[cfg(test)]
 mod contribute_error_handling_tests;
@@ -19,15 +22,9 @@ mod proptest_generator_boundary;
 #[cfg(test)]
 mod proptest_generator_boundary_tests;
 #[cfg(test)]
-mod test;
-#[cfg(test)]
 mod refund_single_token_tests;
 #[cfg(test)]
-mod stellar_token_minter_test;
-#[cfg(test)]
 mod test;
-
-pub mod refund_single_token;
 
 const CONTRACT_VERSION: u32 = 3;
 #[allow(dead_code)]
@@ -649,54 +646,16 @@ impl CrowdfundContract {
         Ok(())
     }
 
-    /// Refund a single contributor after campaign failure.
-    ///
-    /// @notice Transfers the full stored contribution from contract to contributor.
-    /// @dev The transfer direction is explicitly contract -> contributor to prevent
-    ///      script-level parameter typos and accidental reverse transfer attempts.
-    /// @param contributor Contributor address to refund.
-    /// @return Ok(()) when the refund is complete or nothing is owed.
-    pub fn refund_single(env: Env, contributor: Address) -> Result<(), ContractError> {
-        contributor.require_auth();
-
-        let status: Status = env.storage().instance().get(&DataKey::Status).unwrap();
-        if status != Status::Active {
     /// Claim a refund for a single contributor (pull-based).
     ///
-    /// This is the **preferred** refund mechanism, replacing the deprecated
-    /// batch [`refund`] function. Each contributor independently claims their
-    /// own refund after the campaign deadline has passed and the goal was not met.
-    ///
-    /// # Why pull-based?
-    ///
-    /// The old `refund()` iterated over every contributor in a single transaction,
-    /// which is unsafe for large contributor lists (unbounded gas). `refund_single`
-    /// processes exactly one contributor per call, making gas costs predictable and
-    /// enabling scripts to batch calls off-chain at their own pace.
-    ///
-    /// # Arguments
-    /// * `contributor` – The address claiming the refund. Must match the caller.
-    ///
     /// # Errors
-    /// * [`ContractError::CampaignStillActive`] – Deadline has not yet passed.
-    /// * [`ContractError::GoalReached`]         – Goal was met; no refunds available.
-    /// * [`ContractError::NothingToRefund`]     – Caller has no contribution on record
-    ///                                            (or already claimed their refund).
-    ///
-    /// # Panics
-    /// * If the campaign status is not `Active` or `Refunded`.
-    ///   (A `Successful` or `Cancelled` campaign cannot be refunded.)
-    ///
-    /// # Security
-    /// * Requires `contributor.require_auth()` — only the contributor can claim.
-    /// * Zeroes the contribution record **before** emitting the event (checks-effects-interactions).
-    /// * Uses `checked_sub` to prevent underflow on `total_raised`.
+    /// * [`ContractError::CampaignStillActive`] when deadline has not passed.
+    /// * [`ContractError::GoalReached`] when the funding goal was met.
+    /// * [`ContractError::NothingToRefund`] when the contributor has no balance.
     pub fn refund_single(env: Env, contributor: Address) -> Result<(), ContractError> {
         contributor.require_auth();
 
-        // Only allow refunds when the campaign is Active or already in Refunded
-        // state (so individual contributors can still claim after the first batch
-        // refund partially ran, if ever).
+        // A successful or cancelled campaign cannot be refunded.
         let status: Status = env.storage().instance().get(&DataKey::Status).unwrap();
         if status == Status::Successful || status == Status::Cancelled {
             panic!("campaign is not active");
@@ -708,14 +667,11 @@ impl CrowdfundContract {
         }
 
         let goal: i128 = env.storage().instance().get(&DataKey::Goal).unwrap();
-        let total: i128 = env.storage().instance().get(&DataKey::TotalRaised).unwrap();
         let total: i128 = env
             .storage()
             .instance()
             .get(&DataKey::TotalRaised)
             .unwrap_or(0);
-
-        // If the goal was reached, no refunds are permitted.
         if total >= goal {
             return Err(ContractError::GoalReached);
         }
@@ -726,9 +682,8 @@ impl CrowdfundContract {
             .persistent()
             .get(&contribution_key)
             .unwrap_or(0);
-
         if amount == 0 {
-            return Ok(());
+            return Err(ContractError::NothingToRefund);
         }
 
         let token_address: Address = env.storage().instance().get(&DataKey::Token).unwrap();
@@ -741,35 +696,15 @@ impl CrowdfundContract {
         );
 
         env.storage().persistent().set(&contribution_key, &0i128);
-            return Err(ContractError::NothingToRefund);
-        }
-
-        // ── Checks-Effects-Interactions ──────────────────────────────────────
-        // Zero the record first to prevent any re-entrancy / double-claim.
-        env.storage().persistent().set(&contribution_key, &0i128);
         env.storage()
             .persistent()
             .extend_ttl(&contribution_key, 100, 100);
 
         let new_total = total.checked_sub(amount).ok_or(ContractError::Overflow)?;
-        env.storage().instance().set(&DataKey::TotalRaised, &new_total);
-
-        env.events()
-            .publish(("campaign", "refund_single"), (contributor, amount));
-        // Decrement global total with underflow protection.
-        let new_total = total
-            .checked_sub(amount)
-            .expect("total_raised underflow in refund_single");
         env.storage()
             .instance()
             .set(&DataKey::TotalRaised, &new_total);
 
-        // Transfer tokens back to the contributor.
-        let token_address: Address = env.storage().instance().get(&DataKey::Token).unwrap();
-        let token_client = token::Client::new(&env, &token_address);
-        token_client.transfer(&env.current_contract_address(), &contributor, &amount);
-
-        // Emit a structured event for off-chain indexers and scripts.
         env.events()
             .publish(("campaign", "refund_single"), (contributor, amount));
 

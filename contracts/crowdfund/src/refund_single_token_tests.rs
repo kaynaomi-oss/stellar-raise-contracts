@@ -26,7 +26,13 @@ use crate::{ContractError, CrowdfundContract, CrowdfundContractClient, PlatformC
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-fn setup() -> (Env, CrowdfundContractClient<'static>, Address, Address, Address) {
+fn setup() -> (
+    Env,
+    CrowdfundContractClient<'static>,
+    Address,
+    Address,
+    Address,
+) {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -57,15 +63,7 @@ fn init(
     deadline: u64,
 ) {
     client.initialize(
-        creator,
-        creator,
-        token,
-        &goal,
-        &deadline,
-        &1_000,
-        &None,
-        &None,
-        &None,
+        creator, creator, token, &goal, &deadline, &1_000, &None, &None, &None,
     );
 }
 
@@ -186,10 +184,7 @@ fn test_refund_single_double_claim_returns_nothing_to_refund() {
     client.refund_single(&alice);
 
     let result = client.try_refund_single(&alice);
-    assert_eq!(
-        result.unwrap_err().unwrap(),
-        ContractError::NothingToRefund
-    );
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::NothingToRefund);
 }
 
 // ── Zero-contribution guard ───────────────────────────────────────────────────
@@ -205,10 +200,7 @@ fn test_refund_single_no_contribution_returns_nothing_to_refund() {
     env.ledger().set_timestamp(deadline + 1);
 
     let result = client.try_refund_single(&stranger);
-    assert_eq!(
-        result.unwrap_err().unwrap(),
-        ContractError::NothingToRefund
-    );
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::NothingToRefund);
 }
 
 // ── Deadline guard ────────────────────────────────────────────────────────────
@@ -267,10 +259,7 @@ fn test_refund_single_goal_reached_returns_goal_reached() {
 
     env.ledger().set_timestamp(deadline + 1);
     let result = client.try_refund_single(&alice);
-    assert_eq!(
-        result.unwrap_err().unwrap(),
-        ContractError::GoalReached
-    );
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::GoalReached);
 }
 
 /// Goal exactly met (not exceeded) still blocks refunds.
@@ -287,10 +276,7 @@ fn test_refund_single_goal_exactly_met_returns_goal_reached() {
 
     env.ledger().set_timestamp(deadline + 1);
     let result = client.try_refund_single(&alice);
-    assert_eq!(
-        result.unwrap_err().unwrap(),
-        ContractError::GoalReached
-    );
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::GoalReached);
 }
 
 // ── Campaign status guards ────────────────────────────────────────────────────
@@ -409,10 +395,7 @@ fn test_refund_single_after_batch_refund_returns_nothing_to_refund() {
 
     // refund_single should now return NothingToRefund (status is Refunded, amount is 0)
     let result = client.try_refund_single(&alice);
-    assert_eq!(
-        result.unwrap_err().unwrap(),
-        ContractError::NothingToRefund
-    );
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::NothingToRefund);
 }
 
 // ── Platform fee does not affect refund_single ────────────────────────────────

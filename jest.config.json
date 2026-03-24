@@ -13,9 +13,11 @@
         "module": "commonjs",
         "types": ["jest", "node", "@testing-library/jest-dom"]
       }
-    }]
+    ]
   },
-  "testMatch": ["**/*.test.(ts|tsx|js|jsx)"],
+  "testMatch": [
+    "**/*.test.(ts|tsx|js|jsx)"
+  ],
   "transformIgnorePatterns": [
     "node_modules/(?!(@?react|react-dom)/)"
   ],

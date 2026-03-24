@@ -17,3 +17,5 @@ Thumbs.db
 
 contracts/*/test_snapshots/
 node_modules
+coverage/
+
