@@ -26,6 +26,7 @@ use soroban_sdk::{
 //!   - zero-amount contribution edge case
 //!   - exact-deadline boundary (contribution at deadline timestamp accepted)
 //!   - describe_error / is_retryable helper coverage
+//! Tests for contribute() error handling — typed errors replacing old panics.
 
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
@@ -311,7 +312,6 @@ fn contribute_after_deadline_returns_campaign_ended() {
 #[test]
 fn contribute_exactly_at_deadline_is_accepted() {
     let (env, client, contributor, _) = setup();
-    // timestamp == deadline → NOT past deadline (strict >), so accepted
     let deadline = client.deadline();
     env.ledger().set_timestamp(deadline);
     client.contribute(&contributor, &MIN);
@@ -388,32 +388,69 @@ fn overflow_error_code_matches_contract_error_repr() {
 // ── below minimum (panic) ─────────────────────────────────────────────────────
 
 #[test]
-#[should_panic(expected = "amount below minimum")]
-fn contribute_below_minimum_panics() {
+fn contribute_below_minimum_returns_typed_error() {
     let (env, client, contributor, _) = setup();
     env.ledger().set_timestamp(env.ledger().timestamp() + 1);
-    client.contribute(&contributor, &(MIN - 1));
+    let result = client.try_contribute(&contributor, &(MIN - 1));
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::BelowMinimum);
 }
 
 #[test]
-#[should_panic(expected = "amount below minimum")]
-fn contribute_zero_amount_panics_when_min_is_positive() {
+fn contribute_one_below_minimum_returns_below_minimum() {
     let (env, client, contributor, _) = setup();
     env.ledger().set_timestamp(env.ledger().timestamp() + 1);
-    client.contribute(&contributor, &0);
+    let result = client.try_contribute(&contributor, &1);
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::BelowMinimum);
 }
 
-// ── Overflow ──────────────────────────────────────────────────────────────────
+// ── ZeroAmount (typed — replaces old pass-through) ────────────────────────────
 
-/// The Overflow error (code 6) is a defensive guard on `checked_add` for both
-/// the per-contributor total and `total_raised`. In practice the Soroban token
-/// contract enforces that no balance exceeds i128::MAX, so this path is
-/// unreachable through normal token transfers. The test below verifies the
-/// error code constant is correct and that the variant exists in the enum.
+#[test]
+fn contribute_zero_amount_returns_typed_error() {
+    let (env, client, contributor, _) = setup();
+    env.ledger().set_timestamp(env.ledger().timestamp() + 1);
+    let result = client.try_contribute(&contributor, &0);
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::ZeroAmount);
+}
+
+// ── CampaignNotActive (typed — new guard) ─────────────────────────────────────
+
+#[test]
+fn contribute_to_cancelled_campaign_returns_not_active() {
+    let (env, client, contributor, _) = setup();
+    env.ledger().set_timestamp(env.ledger().timestamp() + 1);
+    client.cancel();
+    let result = client.try_contribute(&contributor, &MIN);
+    assert_eq!(
+        result.unwrap_err().unwrap(),
+        ContractError::CampaignNotActive
+    );
+}
+
+#[test]
+fn contribute_to_successful_campaign_returns_not_active() {
+    let (env, client, contributor, token_addr) = setup();
+    env.ledger().set_timestamp(env.ledger().timestamp() + 1);
+    // Fund to goal
+    client.contribute(&contributor, &GOAL);
+    // Advance past deadline and withdraw
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + DEADLINE_OFFSET);
+    client.withdraw();
+    // Now try to contribute
+    let result = client.try_contribute(&contributor, &MIN);
+    assert_eq!(
+        result.unwrap_err().unwrap(),
+        ContractError::CampaignNotActive
+    );
+    let _ = token_addr; // suppress unused warning
+}
+
+// ── Overflow error code constant ──────────────────────────────────────────────
+
 #[test]
 fn overflow_error_code_is_correct() {
     assert_eq!(contribute_error_handling::error_codes::OVERFLOW, 6);
-    // Verify the ContractError repr matches
     assert_eq!(ContractError::Overflow as u32, 6);
 }
 
@@ -444,6 +481,32 @@ fn describe_error_amount_too_low() {
             contribute_error_handling::error_codes::AMOUNT_TOO_LOW
         ),
         "Contribution amount is below the campaign minimum"
+fn describe_error_zero_amount() {
+    assert_eq!(
+        contribute_error_handling::describe_error(
+            contribute_error_handling::error_codes::ZERO_AMOUNT
+        ),
+        "Contribution amount must be greater than zero"
+    );
+}
+
+#[test]
+fn describe_error_below_minimum() {
+    assert_eq!(
+        contribute_error_handling::describe_error(
+            contribute_error_handling::error_codes::BELOW_MINIMUM
+        ),
+        "Contribution amount is below the minimum required"
+    );
+}
+
+#[test]
+fn describe_error_campaign_not_active() {
+    assert_eq!(
+        contribute_error_handling::describe_error(
+            contribute_error_handling::error_codes::CAMPAIGN_NOT_ACTIVE
+        ),
+        "Campaign is not active"
     );
 }
 
@@ -718,4 +781,7 @@ fn no_error_event_emitted_on_success() {
     assert!(!contribute_error_handling::is_retryable(
         contribute_error_handling::error_codes::OVERFLOW
     ));
+    ] {
+        assert!(!contribute_error_handling::is_retryable(code));
+    }
 }

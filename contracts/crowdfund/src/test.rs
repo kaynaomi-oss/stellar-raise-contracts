@@ -58,7 +58,7 @@ enum MockNftDataKey {
     Minted,
 }
 
-use crate::{CrowdfundContract, CrowdfundContractClient, PlatformConfig};
+use crate::{ContractError, CrowdfundContract, CrowdfundContractClient, PlatformConfig};
 
 // ── Mock NFT contract ────────────────────────────────────────────────────────
 
@@ -1300,15 +1300,15 @@ fn test_refund_when_goal_not_met() {
 
 /// Contribution below minimum must panic.
 #[test]
-#[should_panic(expected = "amount below minimum")]
-fn test_contribute_below_minimum_panics() {
+fn test_contribute_below_minimum_returns_typed_error() {
     let (env, client, creator, token_address, admin) = setup_env();
     let deadline = env.ledger().timestamp() + 3600;
     default_init(&client, &creator, &token_address, deadline);
 
     let contributor = Address::generate(&env);
     mint_to(&env, &token_address, &admin, &contributor, 10_000);
-    client.contribute(&contributor, &500);
+    let result = client.try_contribute(&contributor, &500);
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::BelowMinimum);
 }
 
 /// contributors() list grows as new addresses contribute.

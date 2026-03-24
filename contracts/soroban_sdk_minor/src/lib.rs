@@ -81,20 +81,9 @@ impl SorobanSdkMinor {
     }
 
     /// @notice Verifies that `user` has authorized the current call.
-    /// @dev    Demonstrates the v22 `require_auth()` pattern for access control.
     /// @param  user The address whose authorization is being checked.
     /// @return `true` if authorization succeeds (panics otherwise).
     pub fn check_auth(_env: Env, user: Address) -> bool {
-        env.storage()
-            .instance()
-            .set(&String::from_str(&env, "admin"), &admin);
-    }
-
-    /// @notice Demonstrates v22 Address handling and cross-contract call patterns.
-    /// @dev In v22, Address objects are more robust and require_auth is the preferred pattern for authorization.
-    pub fn check_auth(_env: Env, user: Address) -> bool {
-        // NatSpec: require_auth() verifies that the 'user' has authorized this call.
-        // This is a core pattern in the Soroban security model.
         user.require_auth();
         true
     }

@@ -116,8 +116,6 @@ pub const MAX_PROGRESS_BPS: u32 = 10_000;
 //!                               ──► Ok / Err::FeeTooHigh
 //! ```
 
-#![no_std]
-
 // ── Constants ────────────────────────────────────────────────────────────────
 
 /// Minimum allowed campaign goal (in the token's smallest unit).
@@ -323,6 +321,7 @@ pub fn create_campaign(env: soroban_sdk::Env, creator: soroban_sdk::Address, goa
 
 const MIN_CAMPAIGN_GOAL: u64 = 1;
     let raw = (total_raised * PROGRESS_BPS_SCALE) / goal;
+    let raw = total_raised.saturating_mul(PROGRESS_BPS_SCALE) / goal;
     if raw > PROGRESS_BPS_SCALE {
         MAX_PROGRESS_BPS
     } else {
