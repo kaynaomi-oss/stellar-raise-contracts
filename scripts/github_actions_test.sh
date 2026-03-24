@@ -42,6 +42,21 @@
 # @author  stellar-raise-contracts contributors
 # @version 3.0.0
 # =============================================================================
+# github_actions_test.sh
+#
+# Validates the GitHub Actions workflow files in this repository.
+#
+# Checks performed:
+#   1. Required workflow files exist and are non-empty.
+#   2. No workflow references a non-existent actions/checkout version (e.g. @v6).
+#   3. No duplicate WASM build steps exist in rust_ci.yml.
+#
+# Usage:
+#   bash scripts/github_actions_test.sh
+#
+# Exit codes:
+#   0 — all checks passed
+#   1 — one or more checks failed
 
 set -euo pipefail
 
@@ -53,6 +68,12 @@ readonly FAIL=1
 errors=0
 
 # @function fail — records a check failure, increments errors counter
+PASS=0
+FAIL=1
+errors=0
+
+# ── Helper ────────────────────────────────────────────────────────────────────
+
 fail() {
   echo "FAIL: $*" >&2
   errors=$((errors + 1))
@@ -68,6 +89,10 @@ pass() {
 # @param    $1  path  Full path to the workflow file.
 check_file_exists_and_nonempty() {
   local path="$1"
+# ── Check 1: required files exist and are non-empty ───────────────────────────
+
+for file in rust_ci.yml testnet_smoke.yml spellcheck.yml; do
+  path="$WORKFLOWS_DIR/$file"
   if [[ ! -f "$path" ]]; then
     fail "$path does not exist"
   elif [[ ! -s "$path" ]]; then
@@ -94,6 +119,13 @@ done
 if grep -rq -- "actions/checkout@v6" "$WORKFLOWS_DIR/"; then
   fail "Found 'actions/checkout@v6' (non-existent version) in $WORKFLOWS_DIR/"
   grep -rn -- "actions/checkout@v6" "$WORKFLOWS_DIR/" >&2
+done
+
+# ── Check 2: no workflow uses the non-existent actions/checkout@v6 ────────────
+
+if grep -rq "actions/checkout@v6" "$WORKFLOWS_DIR/"; then
+  fail "Found 'actions/checkout@v6' (non-existent version) in $WORKFLOWS_DIR/"
+  grep -rn "actions/checkout@v6" "$WORKFLOWS_DIR/" >&2
 else
   pass "No workflow references actions/checkout@v6"
 fi
@@ -108,6 +140,13 @@ wasm_build_count=$(grep -c -- "cargo build --release --target wasm32-unknown-unk
 
 if [[ "$wasm_build_count" -gt 1 ]]; then
   fail "rust_ci.yml contains $wasm_build_count WASM build steps (expected 1)"
+# ── Check 3: rust_ci.yml has no duplicate WASM build step ─────────────────────
+
+wasm_build_count=$(grep -c "cargo build --release --target wasm32-unknown-unknown" \
+  "$WORKFLOWS_DIR/rust_ci.yml" || true)
+
+if [[ "$wasm_build_count" -gt 1 ]]; then
+  fail "rust_ci.yml contains $wasm_build_count WASM build steps (expected 1) — redundant build wastes CI time"
 else
   pass "rust_ci.yml has exactly $wasm_build_count WASM build step(s)"
 fi
@@ -115,6 +154,7 @@ fi
 # ── Check 4: smoke test does not call non-existent contract functions ──────────
 
 for bad_fn in "is_initialized" "get_campaign_info" "get_stats"; do
+for bad_fn in "is_initialized" "get_campaign_info"; do
   if grep -qF -- "-- $bad_fn" "$WORKFLOWS_DIR/testnet_smoke.yml"; then
     fail "testnet_smoke.yml calls non-existent contract function: $bad_fn"
   else
@@ -127,6 +167,8 @@ done
 # @rationale Omitting --admin causes on-chain rejection with a cryptic error.
 # @security  Admin controls privileged ops (upgrades, refunds).
 # =============================================================================
+# ── Check 5: smoke test initialize call includes required --admin arg ──────────
+
 if ! grep -qF -- "--admin" "$WORKFLOWS_DIR/testnet_smoke.yml"; then
   fail "testnet_smoke.yml initialize call is missing required --admin argument"
 else
@@ -236,5 +278,15 @@ if [[ "$errors" -eq 0 ]]; then
   exit $PASS
 else
   echo "$errors check(s) failed out of 12." >&2
+  exit $FAIL
+fi
+# ── Summary ───────────────────────────────────────────────────────────────────
+
+echo ""
+if [[ "$errors" -eq 0 ]]; then
+  echo "All checks passed."
+  exit $PASS
+else
+  echo "$errors check(s) failed." >&2
   exit $FAIL
 fi

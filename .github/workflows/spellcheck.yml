@@ -56,3 +56,20 @@ jobs:
           post_comment: false
           experimental_apply_changes_via_bot: false
 # Spellcheck workflow
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  spellcheck:
+    name: Spellcheck Markdown & YAML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run spellcheck
+        uses: streetsidesoftware/cspell-action@v6
+        with:
+          files: "**/*.{md,yml,yaml}"
+          config: .cspell.json
+          incremental_files_only: false
