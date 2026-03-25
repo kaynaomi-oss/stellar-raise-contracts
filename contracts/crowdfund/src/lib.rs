@@ -6,57 +6,55 @@ use soroban_sdk::{
     contract, contractclient, contractimpl, contracttype, token, Address, Env, IntoVal, String,
     Symbol, Vec,
 };
+
+// --- Modules ---
 pub mod cargo_toml_rust;
-#[cfg(test)]
-#[path = "cargo_toml_rust.test.rs"]
-mod cargo_toml_rust_test;
-
 pub mod contract_state_size;
-#[cfg(test)]
-mod contract_state_size_test;
-
+pub mod admin_upgrade_mechanism;
 pub mod refund_single_token;
+pub mod soroban_sdk_minor;
+pub mod campaign_goal_minimum;
+pub mod contribute_error_handling;
+pub mod proptest_generator_boundary;
+
+// --- Imports from Modules ---
 use refund_single_token::{
     execute_refund_single, refund_single_transfer, validate_refund_preconditions,
 };
+
+// --- Tests ---
 #[cfg(test)]
-#[path = "refund_single_token.test.rs"]
-mod refund_single_token_test;
-
-pub mod soroban_sdk_minor;
-
+mod test;
 #[cfg(test)]
 mod auth_tests;
-pub mod campaign_goal_minimum;
 #[cfg(test)]
-mod campaign_goal_minimum_test;
-pub mod contract_state_size;
+mod cargo_toml_rust_test;
 #[cfg(test)]
-#[path = "contract_state_size.test.rs"]
 mod contract_state_size_test;
-pub mod contribute_error_handling;
 #[cfg(test)]
-mod contribute_error_handling_tests;
-pub mod proptest_generator_boundary;
-#[cfg(test)]
-mod proptest_generator_boundary_tests;
+mod refund_single_token_test;
 #[cfg(test)]
 mod refund_single_token_tests;
 #[cfg(test)]
-mod test;
+mod campaign_goal_minimum_test;
+#[cfg(test)]
+mod contribute_error_handling_tests;
+#[cfg(test)]
+mod proptest_generator_boundary_tests;
 
+#[cfg(test)]
+#[path = "admin_upgrade_mechanism.test.rs"]
+mod admin_upgrade_mechanism_test;
+
+// --- Constants ---
 const CONTRACT_VERSION: u32 = 3;
 #[allow(dead_code)]
-const CONTRIBUTION_COOLDOWN: u64 = 60; // 60 seconds cooldown
+const CONTRIBUTION_COOLDOWN: u64 = 60;
 
-/// Maximum number of NFT mint calls (and their events) emitted in a single
-/// `withdraw()` invocation.  Caps per-contributor event emission to prevent
-/// unbounded gas consumption when the contributor list is large.
 pub const MAX_NFT_MINT_BATCH: u32 = 50;
 
 // ── Data Types ──────────────────────────────────────────────────────────────
 
-/// Represents the campaign status.
 #[derive(Clone, PartialEq)]
 #[contracttype]
 pub enum Status {
@@ -80,7 +78,6 @@ pub struct PlatformConfig {
     pub fee_bps: u32,
 }
 
-/// Represents all storage keys used by the crowdfund contract.
 #[derive(Clone)]
 #[contracttype]
 pub struct CampaignStats {
@@ -95,7 +92,6 @@ pub struct CampaignStats {
 #[derive(Clone)]
 #[contracttype]
 pub enum DataKey {
-    /// The address of the campaign creator.
     Creator,
     Token,
     Goal,
@@ -105,29 +101,19 @@ pub enum DataKey {
     Contributors,
     Status,
     MinContribution,
-    /// Individual pledge by address (for conditional pledges).
     Pledge(Address),
-    /// Total amount pledged but not yet claimed.
     TotalPledged,
-    /// Stretch goals for bonus milestones.
     StretchGoals,
-    /// Optional secondary bonus goal threshold.
     BonusGoal,
-    /// Optional description for the secondary bonus goal.
     BonusGoalDescription,
-    /// Tracks if bonus-goal-reached event has already been emitted.
     BonusGoalReachedEmitted,
-    /// List of all pledgers (for conditional pledges).
     Pledgers,
-    /// List of roadmap items with dates and descriptions.
     Roadmap,
     Admin,
     Title,
-    /// Campaign description.
     Description,
     SocialLinks,
     PlatformConfig,
-    /// Optional NFT contract used for contributor reward minting.
     NFTContract,
 }
 
@@ -145,13 +131,9 @@ pub enum ContractError {
     GoalNotReached = 4,
     GoalReached = 5,
     Overflow = 6,
-    /// Returned by `refund_single` when the caller has no contribution to refund.
     NothingToRefund = 7,
-    /// Returned by `contribute` when `amount` is zero.
     ZeroAmount = 8,
-    /// Returned by `contribute` when `amount` is below `min_contribution`.
     BelowMinimum = 9,
-    /// Returned by `contribute` when the campaign is not active.
     CampaignNotActive = 10,
 }
 
@@ -793,10 +775,13 @@ impl CrowdfundContract {
     /// # Panics
     /// * If the caller is not the admin.
     pub fn upgrade(env: Env, new_wasm_hash: soroban_sdk::BytesN<32>) {
-        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
-        admin.require_auth();
+        let admin = admin_upgrade_mechanism::validate_admin_upgrade(&env);
+        admin_upgrade_mechanism::perform_upgrade(&env, new_wasm_hash.clone());
 
-        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        env.events().publish(
+            (soroban_sdk::Symbol::new(&env, "upgrade"), admin),
+            new_wasm_hash
+        );
     }
 
     /// Update campaign metadata — only callable by the creator while the
