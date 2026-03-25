@@ -83,81 +83,111 @@ pub const GENERATOR_BATCH_MAX: u32 = 512;
 ///           could overflow a `u64` timestamp when added to `now`.
 //! Proptest generator boundary conditions for the crowdfund contract.
 //!
-//! This module defines canonical boundary constants and validation helpers
-//! used by property-based tests. Correct boundaries ensure:
-//! - Frontend UI displays progress, deadlines, and amounts reliably
-//! - Tests avoid known regression cases (e.g., extremely short deadlines)
-//! - Security assumptions (overflow, division-by-zero) are validated
+//! This module is the single source of truth for all boundary constants and
+//! validation helpers consumed by property-based tests. Correct boundaries
+//! ensure:
+//!
+//! - Frontend UI displays progress, deadlines, and amounts reliably.
+//! - Tests avoid known regression seeds (e.g., extremely short deadlines).
+//! - Security assumptions (overflow, division-by-zero) are validated early.
+//! - CI runtime stays bounded via capped proptest case counts.
 //!
 //! # Typo Fix (Frontend UI)
 //!
-//! The minimum deadline offset was previously documented as 100 seconds, which
-//! caused proptest regressions and poor frontend UX (flaky countdown display).
-//! It is now **1_000** seconds (~17 min) for stability and readability.
+//! The minimum deadline offset was previously documented as **100 seconds**,
+//! which caused proptest regressions and poor frontend UX (flaky countdown
+//! display). It is now **1_000** seconds (~17 min) for stability.
+//!
+//! # NatSpec-style module notice
+//!
+//! @notice All constants in this module are used exclusively by test
+//!         infrastructure. They are not enforced at the contract runtime level.
+//! @dev    Changing any constant here may invalidate existing regression seeds
+//!         stored in `proptest-regressions/test.txt`.
 
-/// Minimum deadline offset in seconds (now + offset).
+// ── Deadline constants ────────────────────────────────────────────────────────
+
+/// @notice Minimum deadline offset in seconds (`now + offset`).
 ///
-/// **Fixed typo**: Was 100, causing regression seeds and flaky frontend countdown.
-/// Use 1_000 (~17 min) for stable tests and meaningful campaign duration display.
+/// @dev Fixed typo: was 100, causing regression seeds and flaky frontend
+///      countdown display. 1_000 (~17 min) provides stable tests and a
+///      meaningful campaign duration for UI rendering.
 pub const DEADLINE_OFFSET_MIN: u64 = 1_000;
 
-/// Maximum deadline offset in seconds.
+/// @notice Maximum deadline offset in seconds.
+///
+/// @dev ~11.5 days. Keeps generated deadlines within a realistic campaign
+///      window and avoids u64 overflow when added to a ledger timestamp.
 pub const DEADLINE_OFFSET_MAX: u64 = 1_000_000;
 
-/// Minimum valid goal amount (stroops).
-/// Avoids zero/negative which breaks progress_bps display in frontend.
+// ── Goal constants ────────────────────────────────────────────────────────────
+
+/// @notice Minimum valid goal amount in stroops.
+///
+/// @dev Avoids zero/negative goals which break `progress_bps` display
+///      (division-by-zero) in the frontend.
 pub const GOAL_MIN: i128 = 1_000;
 
-/// Maximum goal for proptest (100M stroops = 10 XLM).
-/// Keeps tests fast while covering large campaigns.
+/// @notice Maximum goal for proptest (100 M stroops = 10 XLM).
+///
+/// @dev Keeps property tests fast while covering large-campaign scenarios.
+///      Values above this are not representative of real-world campaigns.
 pub const GOAL_MAX: i128 = 100_000_000;
 
-/// Minimum contribution amount (stroops).
+// ── Contribution constants ────────────────────────────────────────────────────
+
+/// @notice Minimum contribution amount in stroops.
+///
+/// @dev Floor of 1 stroop prevents zero-value contributions that would
+///      pollute ledger state without meaningful economic effect.
 pub const MIN_CONTRIBUTION_FLOOR: i128 = 1;
 
-/// Progress basis points cap (100%).
+// ── Basis-points constants ────────────────────────────────────────────────────
+
+/// @notice Progress basis points cap (100 %).
+///
+/// @dev Clamping to 10_000 prevents the frontend from displaying >100 %
+///      funded, which can occur when contributions exceed the goal.
 pub const PROGRESS_BPS_CAP: u32 = 10_000;
 
-/// Platform fee basis points cap (100%).
+/// @notice Platform fee basis points cap (100 %).
+///
+/// @dev A fee above 10_000 bps would exceed the full contribution amount,
+///      which is economically invalid and a potential exploit vector.
 pub const FEE_BPS_CAP: u32 = 10_000;
 
-/// Minimum proptest case count to retain useful boundary coverage.
+// ── Proptest runtime constants ────────────────────────────────────────────────
+
+/// @notice Minimum proptest case count to retain useful boundary coverage.
+///
+/// @dev Below 32 cases, boundary-adjacent values are rarely sampled,
+///      reducing the value of property tests.
 pub const PROPTEST_CASES_MIN: u32 = 32;
 
-/// Maximum proptest case count to cap gas/runtime overhead.
+/// @notice Maximum proptest case count to cap gas/runtime overhead.
+///
+/// @dev 256 cases balances coverage with CI execution time. Exceeding this
+///      can cause timeouts in resource-constrained environments.
 pub const PROPTEST_CASES_MAX: u32 = 256;
 
-/// Maximum synthetic batch size used by boundary generators.
+/// @notice Maximum synthetic batch size used by boundary generators.
+///
+/// @dev Bounded batches prevent worst-case memory/gas spikes in test
+///      scaffolds that iterate over generated inputs.
 pub const GENERATOR_BATCH_MAX: u32 = 512;
 
-/// @notice Clamp requested proptest case count into safe operating bounds.
-/// @dev This protects CI/runtime cost while preserving boundary signal.
-#[inline]
-pub fn clamp_proptest_cases(requested: u32) -> u32 {
-    requested.clamp(PROPTEST_CASES_MIN, PROPTEST_CASES_MAX)
-}
+// ── Validation helpers ────────────────────────────────────────────────────────
 
-/// @notice Validate scalable generator batch size.
-/// @dev Bounded batches prevent worst-case memory/gas spikes in test scaffolds.
-#[inline]
-pub fn is_valid_generator_batch_size(size: u32) -> bool {
-    (1..=GENERATOR_BATCH_MAX).contains(&size)
-}
-
-/// @notice Return stable diagnostic tag for boundary validation events.
-/// @dev Plain string tags keep logs compact and grep-friendly in CI output.
-#[inline]
-pub fn boundary_log_tag() -> &'static str {
-    "proptest_boundary"
-}
-
-/// Validates that a deadline offset is within the accepted range.
+/// @notice Validates that a deadline offset is within the accepted range.
+///
+/// @dev Rejects values that cause timestamp overflow or campaigns too short
+///      to be meaningful for frontend display.
 ///
 /// # Arguments
-/// * `offset` - Seconds from `now` to deadline
+/// * `offset` – Seconds from `now` to deadline.
 ///
 /// # Returns
-/// `true` if offset is in [DEADLINE_OFFSET_MIN, DEADLINE_OFFSET_MAX]
+/// `true` if `offset` is in `[DEADLINE_OFFSET_MIN, DEADLINE_OFFSET_MAX]`.
 #[inline]
 pub fn is_valid_deadline_offset(offset: u64) -> bool {
     (DEADLINE_OFFSET_MIN..=DEADLINE_OFFSET_MAX).contains(&offset)
@@ -184,13 +214,32 @@ pub fn is_valid_goal(goal: i128) -> bool {
 /// @security Ensures `min_contribution` never exceeds `goal`, which would
 ///           make the campaign permanently un-fundable.
 /// Validates that a goal is within the accepted range.
+/// @notice Validates that a goal is within the accepted range.
+///
+/// @dev Rejects zero and negative goals to prevent division-by-zero in
+///      progress calculations.
+///
+/// # Arguments
+/// * `goal` – Campaign goal in stroops.
+///
+/// # Returns
+/// `true` if `goal` is in `[GOAL_MIN, GOAL_MAX]`.
 #[inline]
 pub fn is_valid_goal(goal: i128) -> bool {
     (GOAL_MIN..=GOAL_MAX).contains(&goal)
 }
 
-/// Validates that min_contribution is valid for a given goal.
-/// min_contribution must be in [MIN_CONTRIBUTION_FLOOR, goal].
+/// @notice Validates that `min_contribution` is valid for a given `goal`.
+///
+/// @dev `min_contribution` must be at least `MIN_CONTRIBUTION_FLOOR` and
+///      must not exceed `goal` (otherwise no contribution could ever succeed).
+///
+/// # Arguments
+/// * `min_contribution` – Minimum contribution amount in stroops.
+/// * `goal` – Campaign goal in stroops.
+///
+/// # Returns
+/// `true` if `min_contribution` is in `[MIN_CONTRIBUTION_FLOOR, goal]`.
 #[inline]
 pub fn is_valid_min_contribution(min_contribution: i128, goal: i128) -> bool {
     (MIN_CONTRIBUTION_FLOOR..=goal).contains(&min_contribution)
@@ -202,6 +251,14 @@ pub fn is_valid_min_contribution(min_contribution: i128, goal: i128) -> bool {
 /// @param  min_contribution The campaign's minimum contribution floor.
 /// @return `true` when the amount meets the minimum threshold.
 /// Validates that a contribution amount is >= min_contribution.
+/// @notice Validates that a contribution amount meets the campaign minimum.
+///
+/// # Arguments
+/// * `amount` – Contribution amount in stroops.
+/// * `min_contribution` – Campaign minimum contribution in stroops.
+///
+/// # Returns
+/// `true` if `amount >= min_contribution`.
 #[inline]
 pub fn is_valid_contribution_amount(amount: i128, min_contribution: i128) -> bool {
     amount >= min_contribution
@@ -215,6 +272,33 @@ pub fn is_valid_contribution_amount(amount: i128, min_contribution: i128) -> boo
 /// @notice Negative inputs (e.g. when `raised < 0`) are treated as 0 %.
 ///         Over-funded campaigns are capped at exactly 100 %.
 /// Clamps progress_bps to valid range [0, PROGRESS_BPS_CAP].
+/// @notice Validates that a fee in basis points does not exceed the cap.
+///
+/// @dev A fee above `FEE_BPS_CAP` would exceed 100 % of the contribution,
+///      which is economically invalid.
+///
+/// # Arguments
+/// * `fee_bps` – Fee in basis points.
+///
+/// # Returns
+/// `true` if `fee_bps <= FEE_BPS_CAP`.
+#[inline]
+pub fn is_valid_fee_bps(fee_bps: u32) -> bool {
+    fee_bps <= FEE_BPS_CAP
+}
+
+// ── Clamping helpers ──────────────────────────────────────────────────────────
+
+/// @notice Clamps raw progress basis points to `[0, PROGRESS_BPS_CAP]`.
+///
+/// @dev Negative raw values (e.g., from signed arithmetic) are floored to 0.
+///      Values above 10_000 are capped so the frontend never shows >100 %.
+///
+/// # Arguments
+/// * `raw` – Unclamped progress value (may be negative or >10_000).
+///
+/// # Returns
+/// A `u32` in `[0, PROGRESS_BPS_CAP]`.
 #[inline]
 pub fn clamp_progress_bps(raw: i128) -> u32 {
     if raw <= 0 {
@@ -234,6 +318,63 @@ pub fn clamp_progress_bps(raw: i128) -> u32 {
 ///
 /// @security Uses `saturating_mul` to prevent overflow on large `raised`
 ///           values before dividing by `goal`.
+/// @notice Clamps a requested proptest case count into safe operating bounds.
+///
+/// @dev Protects CI/runtime cost while preserving boundary signal. Values
+///      below `PROPTEST_CASES_MIN` are raised; values above
+///      `PROPTEST_CASES_MAX` are lowered.
+///
+/// # Arguments
+/// * `requested` – Desired number of proptest cases.
+///
+/// # Returns
+/// A `u32` in `[PROPTEST_CASES_MIN, PROPTEST_CASES_MAX]`.
+#[inline]
+pub fn clamp_proptest_cases(requested: u32) -> u32 {
+    requested.clamp(PROPTEST_CASES_MIN, PROPTEST_CASES_MAX)
+}
+
+// ── Generator batch helpers ───────────────────────────────────────────────────
+
+/// @notice Validates a synthetic generator batch size.
+///
+/// @dev Bounded batches prevent worst-case memory/gas spikes in test
+///      scaffolds that iterate over generated inputs.
+///
+/// # Arguments
+/// * `size` – Proposed batch size.
+///
+/// # Returns
+/// `true` if `size` is in `[1, GENERATOR_BATCH_MAX]`.
+#[inline]
+pub fn is_valid_generator_batch_size(size: u32) -> bool {
+    (1..=GENERATOR_BATCH_MAX).contains(&size)
+}
+
+/// @notice Returns a stable diagnostic tag for boundary validation events.
+///
+/// @dev Plain string tags keep logs compact and grep-friendly in CI output.
+///
+/// # Returns
+/// The static string `"proptest_boundary"`.
+#[inline]
+pub fn boundary_log_tag() -> &'static str {
+    "proptest_boundary"
+}
+
+// ── Derived helpers ───────────────────────────────────────────────────────────
+
+/// @notice Computes progress in basis points given `raised` and `goal`.
+///
+/// @dev Returns 0 when `goal` is 0 to avoid division-by-zero. The result is
+///      clamped via `clamp_progress_bps` so it never exceeds 10_000.
+///
+/// # Arguments
+/// * `raised` – Amount raised so far in stroops.
+/// * `goal`   – Campaign goal in stroops.
+///
+/// # Returns
+/// Progress in basis points, clamped to `[0, PROGRESS_BPS_CAP]`.
 #[inline]
 pub fn compute_progress_bps(raised: i128, goal: i128) -> u32 {
     if goal <= 0 {
@@ -444,9 +585,32 @@ impl ProptestGeneratorBoundary {
     /// @return Symbol "boundary" for event filtering.
     pub fn log_tag(_env: Env) -> Symbol {
         Symbol::new(&_env, "boundary")
+/// @notice Computes the fee amount for a given contribution and fee rate.
+///
+/// @dev Uses integer arithmetic; result is floored. Returns 0 when
+///      `fee_bps` is 0 or `amount` is 0.
+///
+/// # Arguments
+/// * `amount`  – Contribution amount in stroops.
+/// * `fee_bps` – Fee rate in basis points.
+///
+/// # Returns
+/// Fee amount in stroops.
+#[inline]
+pub fn compute_fee_amount(amount: i128, fee_bps: u32) -> i128 {
+    if amount <= 0 || fee_bps == 0 {
+        return 0;
+    }
+    amount.saturating_mul(fee_bps as i128) / 10_000
+}
+
+// ── Inline unit tests ─────────────────────────────────────────────────────────
+
 #[cfg(test)]
 mod unit_tests {
     use super::*;
+
+    // ── Constant sanity checks ────────────────────────────────────────────────
 
     #[test]
     fn deadline_offset_min_is_1000() {
@@ -454,82 +618,311 @@ mod unit_tests {
     }
 
     #[test]
-    fn is_valid_deadline_offset_rejects_below_min() {
+    fn deadline_offset_max_is_1_000_000() {
+        assert_eq!(DEADLINE_OFFSET_MAX, 1_000_000);
+    }
+
+    #[test]
+    fn goal_min_is_1000() {
+        assert_eq!(GOAL_MIN, 1_000);
+    }
+
+    #[test]
+    fn goal_max_is_100_000_000() {
+        assert_eq!(GOAL_MAX, 100_000_000);
+    }
+
+    #[test]
+    fn min_contribution_floor_is_1() {
+        assert_eq!(MIN_CONTRIBUTION_FLOOR, 1);
+    }
+
+    #[test]
+    fn progress_bps_cap_is_10000() {
+        assert_eq!(PROGRESS_BPS_CAP, 10_000);
+    }
+
+    #[test]
+    fn fee_bps_cap_is_10000() {
+        assert_eq!(FEE_BPS_CAP, 10_000);
+    }
+
+    #[test]
+    fn proptest_cases_min_is_32() {
+        assert_eq!(PROPTEST_CASES_MIN, 32);
+    }
+
+    #[test]
+    fn proptest_cases_max_is_256() {
+        assert_eq!(PROPTEST_CASES_MAX, 256);
+    }
+
+    #[test]
+    fn generator_batch_max_is_512() {
+        assert_eq!(GENERATOR_BATCH_MAX, 512);
+    }
+
+    // ── is_valid_deadline_offset ──────────────────────────────────────────────
+
+    #[test]
+    fn deadline_offset_rejects_below_min() {
+        assert!(!is_valid_deadline_offset(0));
         assert!(!is_valid_deadline_offset(99));
-        assert!(!is_valid_deadline_offset(100)); // previously used, now invalid
+        // Typo-fix regression: 100 was the old (wrong) minimum.
+        assert!(!is_valid_deadline_offset(100));
+        assert!(!is_valid_deadline_offset(999));
     }
 
     #[test]
-    fn is_valid_deadline_offset_accepts_min() {
+    fn deadline_offset_accepts_min() {
         assert!(is_valid_deadline_offset(DEADLINE_OFFSET_MIN));
-        assert!(is_valid_deadline_offset(1_000));
     }
 
     #[test]
-    fn is_valid_deadline_offset_accepts_within_range() {
-        assert!(is_valid_deadline_offset(3600));
-        assert!(is_valid_deadline_offset(100_000));
+    fn deadline_offset_accepts_within_range() {
+        assert!(is_valid_deadline_offset(3_600));
+        assert!(is_valid_deadline_offset(86_400));
+        assert!(is_valid_deadline_offset(500_000));
     }
 
     #[test]
-    fn is_valid_deadline_offset_accepts_max() {
+    fn deadline_offset_accepts_max() {
         assert!(is_valid_deadline_offset(DEADLINE_OFFSET_MAX));
     }
 
     #[test]
-    fn is_valid_goal_accepts_valid() {
+    fn deadline_offset_rejects_above_max() {
+        assert!(!is_valid_deadline_offset(DEADLINE_OFFSET_MAX + 1));
+        assert!(!is_valid_deadline_offset(u64::MAX));
+    }
+
+    // ── is_valid_goal ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn goal_rejects_zero_and_negative() {
+        assert!(!is_valid_goal(0));
+        assert!(!is_valid_goal(-1));
+        assert!(!is_valid_goal(i128::MIN));
+    }
+
+    #[test]
+    fn goal_rejects_below_min() {
+        assert!(!is_valid_goal(GOAL_MIN - 1));
+    }
+
+    #[test]
+    fn goal_accepts_min() {
         assert!(is_valid_goal(GOAL_MIN));
+    }
+
+    #[test]
+    fn goal_accepts_within_range() {
         assert!(is_valid_goal(1_000_000));
+        assert!(is_valid_goal(50_000_000));
+    }
+
+    #[test]
+    fn goal_accepts_max() {
         assert!(is_valid_goal(GOAL_MAX));
     }
 
     #[test]
-    fn is_valid_goal_rejects_invalid() {
-        assert!(!is_valid_goal(0));
-        assert!(!is_valid_goal(-1));
+    fn goal_rejects_above_max() {
         assert!(!is_valid_goal(GOAL_MAX + 1));
+        assert!(!is_valid_goal(i128::MAX));
+    }
+
+    // ── is_valid_min_contribution ─────────────────────────────────────────────
+
+    #[test]
+    fn min_contribution_accepts_floor() {
+        assert!(is_valid_min_contribution(MIN_CONTRIBUTION_FLOOR, 1_000));
     }
 
     #[test]
-    fn is_valid_min_contribution_accepts_valid() {
-        assert!(is_valid_min_contribution(1, 1_000));
+    fn min_contribution_accepts_equal_to_goal() {
         assert!(is_valid_min_contribution(1_000, 1_000));
+    }
+
+    #[test]
+    fn min_contribution_accepts_midrange() {
         assert!(is_valid_min_contribution(500, 1_000_000));
     }
 
     #[test]
-    fn is_valid_min_contribution_rejects_invalid() {
+    fn min_contribution_rejects_zero() {
         assert!(!is_valid_min_contribution(0, 1_000));
+    }
+
+    #[test]
+    fn min_contribution_rejects_above_goal() {
         assert!(!is_valid_min_contribution(1_001, 1_000));
     }
 
+    // ── is_valid_contribution_amount ──────────────────────────────────────────
+
     #[test]
-    fn clamp_progress_bps_bounds() {
+    fn contribution_accepts_at_min() {
+        assert!(is_valid_contribution_amount(1_000, 1_000));
+    }
+
+    #[test]
+    fn contribution_accepts_above_min() {
+        assert!(is_valid_contribution_amount(100_000, 1_000));
+    }
+
+    #[test]
+    fn contribution_rejects_below_min() {
+        assert!(!is_valid_contribution_amount(999, 1_000));
+        assert!(!is_valid_contribution_amount(0, 1));
+    }
+
+    // ── is_valid_fee_bps ──────────────────────────────────────────────────────
+
+    #[test]
+    fn fee_bps_accepts_zero() {
+        assert!(is_valid_fee_bps(0));
+    }
+
+    #[test]
+    fn fee_bps_accepts_cap() {
+        assert!(is_valid_fee_bps(FEE_BPS_CAP));
+    }
+
+    #[test]
+    fn fee_bps_rejects_above_cap() {
+        assert!(!is_valid_fee_bps(FEE_BPS_CAP + 1));
+        assert!(!is_valid_fee_bps(u32::MAX));
+    }
+
+    // ── clamp_progress_bps ────────────────────────────────────────────────────
+
+    #[test]
+    fn clamp_progress_bps_floors_negative() {
         assert_eq!(clamp_progress_bps(-1), 0);
+        assert_eq!(clamp_progress_bps(i128::MIN), 0);
+    }
+
+    #[test]
+    fn clamp_progress_bps_floors_zero() {
         assert_eq!(clamp_progress_bps(0), 0);
-        assert_eq!(clamp_progress_bps(5000), 5000);
+    }
+
+    #[test]
+    fn clamp_progress_bps_passes_midrange() {
+        assert_eq!(clamp_progress_bps(5_000), 5_000);
+        assert_eq!(clamp_progress_bps(1), 1);
+        assert_eq!(clamp_progress_bps(9_999), 9_999);
+    }
+
+    #[test]
+    fn clamp_progress_bps_caps_at_10000() {
         assert_eq!(clamp_progress_bps(10_000), PROGRESS_BPS_CAP);
         assert_eq!(clamp_progress_bps(20_000), PROGRESS_BPS_CAP);
+        assert_eq!(clamp_progress_bps(i128::MAX), PROGRESS_BPS_CAP);
     }
 
+    // ── clamp_proptest_cases ──────────────────────────────────────────────────
+
     #[test]
-    fn clamp_proptest_cases_bounds() {
+    fn clamp_proptest_cases_raises_below_min() {
         assert_eq!(clamp_proptest_cases(0), PROPTEST_CASES_MIN);
         assert_eq!(clamp_proptest_cases(16), PROPTEST_CASES_MIN);
-        assert_eq!(clamp_proptest_cases(128), 128);
-        assert_eq!(clamp_proptest_cases(1024), PROPTEST_CASES_MAX);
+        assert_eq!(clamp_proptest_cases(31), PROPTEST_CASES_MIN);
     }
 
     #[test]
-    fn valid_generator_batch_size_bounds() {
-        assert!(!is_valid_generator_batch_size(0));
-        assert!(is_valid_generator_batch_size(1));
-        assert!(is_valid_generator_batch_size(GENERATOR_BATCH_MAX));
-        assert!(!is_valid_generator_batch_size(GENERATOR_BATCH_MAX + 1));
+    fn clamp_proptest_cases_passes_valid() {
+        assert_eq!(clamp_proptest_cases(32), 32);
+        assert_eq!(clamp_proptest_cases(128), 128);
+        assert_eq!(clamp_proptest_cases(256), 256);
     }
+
+    #[test]
+    fn clamp_proptest_cases_lowers_above_max() {
+        assert_eq!(clamp_proptest_cases(257), PROPTEST_CASES_MAX);
+        assert_eq!(clamp_proptest_cases(1_024), PROPTEST_CASES_MAX);
+        assert_eq!(clamp_proptest_cases(u32::MAX), PROPTEST_CASES_MAX);
+    }
+
+    // ── is_valid_generator_batch_size ─────────────────────────────────────────
+
+    #[test]
+    fn batch_size_rejects_zero() {
+        assert!(!is_valid_generator_batch_size(0));
+    }
+
+    #[test]
+    fn batch_size_accepts_one() {
+        assert!(is_valid_generator_batch_size(1));
+    }
+
+    #[test]
+    fn batch_size_accepts_max() {
+        assert!(is_valid_generator_batch_size(GENERATOR_BATCH_MAX));
+    }
+
+    #[test]
+    fn batch_size_rejects_above_max() {
+        assert!(!is_valid_generator_batch_size(GENERATOR_BATCH_MAX + 1));
+        assert!(!is_valid_generator_batch_size(u32::MAX));
+    }
+
+    // ── boundary_log_tag ──────────────────────────────────────────────────────
 
     #[test]
     fn boundary_log_tag_is_stable() {
         assert_eq!(boundary_log_tag(), "proptest_boundary");
+    }
+
+    // ── compute_progress_bps ──────────────────────────────────────────────────
+
+    #[test]
+    fn compute_progress_bps_zero_goal_returns_zero() {
+        assert_eq!(compute_progress_bps(1_000, 0), 0);
+        assert_eq!(compute_progress_bps(0, 0), 0);
+    }
+
+    #[test]
+    fn compute_progress_bps_half_funded() {
+        assert_eq!(compute_progress_bps(500, 1_000), 5_000);
+    }
+
+    #[test]
+    fn compute_progress_bps_fully_funded() {
+        assert_eq!(compute_progress_bps(1_000, 1_000), 10_000);
+    }
+
+    #[test]
+    fn compute_progress_bps_over_funded_clamped() {
+        assert_eq!(compute_progress_bps(2_000, 1_000), PROGRESS_BPS_CAP);
+    }
+
+    #[test]
+    fn compute_progress_bps_zero_raised() {
+        assert_eq!(compute_progress_bps(0, 1_000), 0);
+    }
+
+    // ── compute_fee_amount ────────────────────────────────────────────────────
+
+    #[test]
+    fn compute_fee_amount_zero_fee() {
+        assert_eq!(compute_fee_amount(1_000_000, 0), 0);
+    }
+
+    #[test]
+    fn compute_fee_amount_zero_amount() {
+        assert_eq!(compute_fee_amount(0, 500), 0);
+    }
+
+    #[test]
+    fn compute_fee_amount_5_percent() {
+        // 5 % = 500 bps; 1_000_000 * 500 / 10_000 = 50_000
+        assert_eq!(compute_fee_amount(1_000_000, 500), 50_000);
+    }
+
+    #[test]
+    fn compute_fee_amount_100_percent() {
+        assert_eq!(compute_fee_amount(1_000_000, 10_000), 1_000_000);
     }
 }
