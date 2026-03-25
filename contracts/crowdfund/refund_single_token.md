@@ -238,6 +238,7 @@ contributor refund. It exposes three public items:
 | `refund_single_transfer`      | Direction-locked token transfer (contract → contributor) |
 | `validate_refund_preconditions` | Pure guard — checks all preconditions, returns amount  |
 | `execute_refund_single`       | Atomic CEI execution — zero storage, then transfer       |
+| `refund_available`            | View function — checks if refund is available for UI     |
 
 The `refund_single` contract method in `lib.rs` is now a three-line wrapper:
 
@@ -246,6 +247,14 @@ pub fn refund_single(env: Env, contributor: Address) -> Result<(), ContractError
     contributor.require_auth();
     let amount = validate_refund_preconditions(&env, &contributor)?;
     execute_refund_single(&env, &contributor, amount)
+}
+```
+
+The `refund_available` view function allows frontend UI to check refund status:
+
+```rust
+pub fn refund_available(env: Env, contributor: Address) -> Result<i128, ContractError> {
+    validate_refund_preconditions(&env, &contributor)
 }
 ```
 
@@ -353,6 +362,18 @@ Panics with `"campaign is not active"` when status is `Successful` or `Cancelled
 
 ---
 
+### `refund_available`
+
+```rust
+pub fn refund_available(env: Env, contributor: Address) -> Result<i128, ContractError>
+```
+
+View function that checks if a refund is available for the given contributor.
+Returns the refundable amount if available, or the appropriate error.
+Safe to call without authentication; useful for frontend UI to show refund status.
+
+---
+
 ### `execute_refund_single`
 
 ```rust
@@ -427,3 +448,4 @@ Tests cover:
 - Double-refund prevention
 - Large amounts (overflow protection)
 - Multi-contributor isolation
+- `refund_available` view function for UI state

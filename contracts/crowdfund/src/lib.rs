@@ -2346,6 +2346,20 @@ impl CrowdfundContract {
         execute_refund_single(&env, &contributor, amount)
     }
 
+    /// Check if a refund is available for the given contributor.
+    ///
+    /// This is a view function that can be called to determine if `refund_single`
+    /// would succeed for the given contributor. Useful for frontend UI to show
+    /// refund buttons or status.
+    ///
+    /// Returns the amount that would be refunded if `refund_single` is called,
+    /// or an error if no refund is available.
+    ///
+    /// @param contributor The address to check for refund availability.
+    /// @return `Ok(amount)` if refund is available, `Err(ContractError)` otherwise.
+    pub fn refund_available(env: Env, contributor: Address) -> Result<i128, ContractError> {
+        validate_refund_preconditions(&env, &contributor)
+    }
 
     /// Cancel the campaign and refund all contributors — callable only by
     /// the creator while the campaign is still Active.
