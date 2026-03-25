@@ -37,9 +37,13 @@ pub fn refund_available(env: Env, contributor: Address) -> Result<i128, Contract
 The deprecated `refund()` iterated over every contributor in one transaction.
 With many contributors this is unsafe:
 
+
+If the contributor has `0` stored contribution, `refund_single_transfer` helper skips the transfer (gas optimization) and returns `Ok(())`.
+
 - **Unbounded gas** — iteration cost grows linearly with contributor count.
 - **DoS** — a single bad actor can bloat the list to make the batch prohibitively expensive.
 - **Poor composability** — scripts cannot easily retry partial failures.
+
 
 `refund_single` processes exactly one contributor per call, so gas costs are
 constant and predictable regardless of campaign size.
@@ -58,6 +62,18 @@ calling `refund_single_transfer`. This prevents re-entrancy: even if the token
 contract calls back into the crowdfund contract, the contribution is already 0
 and `validate_refund_preconditions` will return `NothingToRefund`.
 
+5. **Zero-amount optimization**  
+   `refund_single_transfer` skips transfers where `amount <= 0`, preventing no-op gas waste.
+
+6. **Debug logging**  
+   Emits `("debug", "refund_transfer_attempt") (contributor, amount)` before successful transfers for observability.
+
+
+## Test coverage
+
+`refund_single_token.test.rs` + `refund_single_token_security_tests.rs` cover:
+
+
 ```
 validate_refund_preconditions  ← pure read, no state change
     ↓
@@ -71,6 +87,7 @@ execute_refund_single
 `refund_single_transfer` always transfers `contract → contributor`. The
 direction cannot be reversed by a caller because the parameters are positional
 and the function signature enforces the order.
+
 
 ### 4. Overflow protection
 `execute_refund_single` decrements `total_raised` with `checked_sub`, returning

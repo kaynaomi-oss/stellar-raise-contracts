@@ -727,10 +727,18 @@ impl CrowdfundContract {
     /// * [`ContractError::GoalReached`]         – Goal was met; no refunds available.
     /// * [`ContractError::NothingToRefund`]     – Caller has no contribution on record.
     ///
-    /// # Security
+    /// # Security & Optimizations
     /// * Requires `contributor.require_auth()` — only the contributor can claim.
     /// * Zeroes the contribution record **before** transfer (checks-effects-interactions).
     /// * Uses `checked_sub` to prevent underflow on `total_raised`.
+
+    /// * `refund_single_transfer` helper skips amount <= 0 (gas optimization).
+    /// * Debug event emitted before transfer for monitoring.
+
+    pub fn refund_single(env: Env, contributor: Address) -> Result<(), ContractError> {
+        contributor.require_auth();
+
+
     /// Claim a refund for a single contributor (pull-based).
     ///
     /// # Errors
@@ -773,8 +781,6 @@ impl CrowdfundContract {
         }
 
         // ── Checks-Effects-Interactions ──────────────────────────────────────
-        let token_address: Address = env.storage().instance().get(&DataKey::Token).unwrap();
-        let token_client = token::Client::new(&env, &token_address);
         refund_single_transfer(
             &token_client,
             &env.current_contract_address(),
@@ -792,12 +798,8 @@ impl CrowdfundContract {
             .instance()
             .set(&DataKey::TotalRaised, &new_total);
 
-        let token_address: Address = env.storage().instance().get(&DataKey::Token).unwrap();
-        let token_client = token::Client::new(&env, &token_address);
-        token_client.transfer(&env.current_contract_address(), &contributor, &amount);
-
         env.events()
-            .publish(("campaign", "refund_single"), (contributor, amount));
+            .publish(("campaign", "refund_single"), (contributor.clone(), amount));
 
         Ok(())
     pub fn refund_single(env: Env, contributor: Address) -> Result<(), ContractError> {
@@ -820,6 +822,7 @@ impl CrowdfundContract {
     pub fn refund_available(env: Env, contributor: Address) -> Result<i128, ContractError> {
         validate_refund_preconditions(&env, &contributor)
     }
+
 
     /// Cancel the campaign and refund all contributors — callable only by
     /// the creator while the campaign is still Active.
