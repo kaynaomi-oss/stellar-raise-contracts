@@ -17,6 +17,12 @@ use crate::soroban_sdk_minor::{
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+    assess_compatibility, clamp_page_size, emit_upgrade_audit_event,
+    emit_upgrade_audit_event_with_note, pagination_window, validate_upgrade_note,
+    validate_wasm_hash, CompatibilityStatus, FRONTEND_PAGE_SIZE_MAX, FRONTEND_PAGE_SIZE_MIN,
+    SDK_VERSION_BASELINE, SDK_VERSION_TARGET, UPGRADE_NOTE_MAX_LEN,
+};
+
 fn make_env() -> Env {
     let env = Env::default();
     env.mock_all_auths();
@@ -40,11 +46,13 @@ fn version_constants_are_non_empty() {
 // ── assess_compatibility ──────────────────────────────────────────────────────
 
 /// Same-major minor bump → Compatible.
+/// @notice Same-major bump stays compatible.
 #[test]
 fn compatibility_same_major_is_compatible() {
     let env = make_env();
     assert_eq!(
         assess_compatibility(&env, "22.0.0", "22.1.0"),
+        assess_compatibility(&env, "22.0.0", "22.1.1"),
         CompatibilityStatus::Compatible
     );
 }
@@ -70,6 +78,7 @@ fn compatibility_patch_bump_is_compatible() {
 }
 
 /// Cross-major upgrade → RequiresMigration.
+/// @notice Cross-major bump requires migration.
 #[test]
 fn compatibility_cross_major_requires_migration() {
     let env = make_env();
@@ -217,6 +226,12 @@ fn is_minor_bump_cross_major_is_false() {
 // ── validate_wasm_hash ────────────────────────────────────────────────────────
 
 #[test]
+fn version_constants_are_non_empty() {
+    assert!(!SDK_VERSION_BASELINE.is_empty());
+    assert!(!SDK_VERSION_TARGET.is_empty());
+}
+
+#[test]
 fn validate_wasm_hash_rejects_zero() {
     let env = make_env();
     let hash = BytesN::from_array(&env, &[0u8; 32]);
@@ -261,6 +276,9 @@ fn clamp_page_size_enforces_bounds() {
 }
 
 // ── pagination_window ─────────────────────────────────────────────────────────
+
+    assert_eq!(clamp_page_size(FRONTEND_PAGE_SIZE_MAX + 1), FRONTEND_PAGE_SIZE_MAX);
+}
 
 #[test]
 fn pagination_window_uses_clamped_limit() {
@@ -313,6 +331,11 @@ fn upgrade_note_validation_exact_boundary_is_valid() {
 #[test]
 fn upgrade_note_validation_one_over_boundary_is_invalid() {
     let env = make_env();
+fn upgrade_note_validation_bounds() {
+    let env = make_env();
+    let ok = String::from_str(&env, "ok");
+    assert!(validate_upgrade_note(&ok));
+
     let long = make_string(&env, UPGRADE_NOTE_MAX_LEN + 1, b'a');
     assert!(!validate_upgrade_note(&long));
 }
@@ -555,5 +578,13 @@ fn full_safe_upgrade_flow() {
         String::from_str(&env, "22.1.0"),
         reviewer,
         String::from_str(&env, "all checks passed"),
+#[test]
+fn emit_audit_event_without_note_does_not_panic() {
+    let env = make_env();
+    emit_upgrade_audit_event(
+        &env,
+        String::from_str(&env, "22.0.0"),
+        String::from_str(&env, "22.0.1"),
+        Address::generate(&env),
     );
 }
