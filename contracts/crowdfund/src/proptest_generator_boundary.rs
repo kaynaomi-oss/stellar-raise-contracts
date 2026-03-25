@@ -121,6 +121,36 @@ pub const PROGRESS_BPS_CAP: u32 = 10_000;
 /// Platform fee basis points cap (100%).
 pub const FEE_BPS_CAP: u32 = 10_000;
 
+/// Minimum proptest case count to retain useful boundary coverage.
+pub const PROPTEST_CASES_MIN: u32 = 32;
+
+/// Maximum proptest case count to cap gas/runtime overhead.
+pub const PROPTEST_CASES_MAX: u32 = 256;
+
+/// Maximum synthetic batch size used by boundary generators.
+pub const GENERATOR_BATCH_MAX: u32 = 512;
+
+/// @notice Clamp requested proptest case count into safe operating bounds.
+/// @dev This protects CI/runtime cost while preserving boundary signal.
+#[inline]
+pub fn clamp_proptest_cases(requested: u32) -> u32 {
+    requested.clamp(PROPTEST_CASES_MIN, PROPTEST_CASES_MAX)
+}
+
+/// @notice Validate scalable generator batch size.
+/// @dev Bounded batches prevent worst-case memory/gas spikes in test scaffolds.
+#[inline]
+pub fn is_valid_generator_batch_size(size: u32) -> bool {
+    (1..=GENERATOR_BATCH_MAX).contains(&size)
+}
+
+/// @notice Return stable diagnostic tag for boundary validation events.
+/// @dev Plain string tags keep logs compact and grep-friendly in CI output.
+#[inline]
+pub fn boundary_log_tag() -> &'static str {
+    "proptest_boundary"
+}
+
 /// Validates that a deadline offset is within the accepted range.
 ///
 /// # Arguments
@@ -480,5 +510,26 @@ mod unit_tests {
         assert_eq!(clamp_progress_bps(5000), 5000);
         assert_eq!(clamp_progress_bps(10_000), PROGRESS_BPS_CAP);
         assert_eq!(clamp_progress_bps(20_000), PROGRESS_BPS_CAP);
+    }
+
+    #[test]
+    fn clamp_proptest_cases_bounds() {
+        assert_eq!(clamp_proptest_cases(0), PROPTEST_CASES_MIN);
+        assert_eq!(clamp_proptest_cases(16), PROPTEST_CASES_MIN);
+        assert_eq!(clamp_proptest_cases(128), 128);
+        assert_eq!(clamp_proptest_cases(1024), PROPTEST_CASES_MAX);
+    }
+
+    #[test]
+    fn valid_generator_batch_size_bounds() {
+        assert!(!is_valid_generator_batch_size(0));
+        assert!(is_valid_generator_batch_size(1));
+        assert!(is_valid_generator_batch_size(GENERATOR_BATCH_MAX));
+        assert!(!is_valid_generator_batch_size(GENERATOR_BATCH_MAX + 1));
+    }
+
+    #[test]
+    fn boundary_log_tag_is_stable() {
+        assert_eq!(boundary_log_tag(), "proptest_boundary");
     }
 }
