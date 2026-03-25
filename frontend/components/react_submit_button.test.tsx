@@ -30,6 +30,12 @@ import {
   isValidSubmitButtonStateTransition,
   normalizeSubmitButtonLabel,
   resolveSafeSubmitButtonState,
+ * @title React Submit Button Tests
+ * @notice Validates state transitions, accessibility flags, and security-aware label handling.
+ */
+import {
+  isSubmitButtonBusy,
+  isSubmitButtonDisabled,
   resolveSubmitButtonLabel,
   type SubmitButtonLabels,
   type SubmitButtonState,
@@ -109,6 +115,53 @@ describe("resolveSubmitButtonLabel", () => {
 
   it("falls back to defaults for empty or whitespace custom labels", () => {
     const labels: SubmitButtonLabels = { idle: "", submitting: "   " };
+describe("normalizeSubmitButtonLabel", () => {
+  it("returns fallback for non-string values", () => {
+    expect(normalizeSubmitButtonLabel(undefined, "Submit")).toBe("Submit");
+    expect(normalizeSubmitButtonLabel(404, "Submit")).toBe("Submit");
+    expect(normalizeSubmitButtonLabel({}, "Submit")).toBe("Submit");
+  });
+
+  it("returns fallback for empty or whitespace labels", () => {
+    expect(normalizeSubmitButtonLabel("", "Submit")).toBe("Submit");
+    expect(normalizeSubmitButtonLabel("   \n\t", "Submit")).toBe("Submit");
+  });
+
+  it("removes control characters and normalizes whitespace", () => {
+    const dirtyLabel = "Pay\u0000\u0008\n   Now";
+    expect(normalizeSubmitButtonLabel(dirtyLabel, "Submit")).toBe("Pay Now");
+  });
+
+  it("truncates labels above the maximum bound", () => {
+    const longLabel = "A".repeat(200);
+    const normalized = normalizeSubmitButtonLabel(longLabel, "Submit");
+
+    expect(normalized).toHaveLength(80);
+    expect(normalized.endsWith("...")).toBe(true);
+  });
+});
+
+describe("resolveSubmitButtonLabel", () => {
+  it("returns defaults for every known state", () => {
+    const states: SubmitButtonState[] = ["idle", "submitting", "success", "error", "disabled"];
+    const labels = states.map((state) => resolveSubmitButtonLabel(state));
+
+    expect(labels).toEqual(["Submit", "Submitting...", "Submitted", "Try Again", "Submit Disabled"]);
+  });
+
+  it("uses sanitized custom labels", () => {
+    const customLabels: SubmitButtonLabels = {
+      success: "  Campaign submitted successfully  ",
+    };
+
+    expect(resolveSubmitButtonLabel("success", customLabels)).toBe("Campaign submitted successfully");
+  });
+
+  it("keeps hostile markup-like text as inert string content", () => {
+    const hostile = "<img src=x onerror=alert(1) />";
+    const labels: SubmitButtonLabels = { error: hostile };
+
+    // Security assumption: React escapes text nodes, so this remains plain text content.
 describe("resolveSubmitButtonLabel", () => {
   it("returns default labels for every known state", () => {
     const states: SubmitButtonState[] = ["idle", "submitting", "success", "error", "disabled"];
@@ -1398,5 +1451,30 @@ describe("interaction and busy guards", () => {
     expect(isSubmitButtonBusy("submitting", false)).toBe(true);
     expect(isSubmitButtonBusy("idle", true)).toBe(true);
     expect(isSubmitButtonBusy("idle", false)).toBe(false);
+describe("isSubmitButtonDisabled", () => {
+  it("returns true for submitting and disabled states", () => {
+    expect(isSubmitButtonDisabled("submitting")).toBe(true);
+    expect(isSubmitButtonDisabled("disabled")).toBe(true);
+  });
+
+  it("returns false for active states when disabled flag is not set", () => {
+    expect(isSubmitButtonDisabled("idle")).toBe(false);
+    expect(isSubmitButtonDisabled("success")).toBe(false);
+    expect(isSubmitButtonDisabled("error")).toBe(false);
+  });
+
+  it("respects explicit disabled override", () => {
+    expect(isSubmitButtonDisabled("idle", true)).toBe(true);
+    expect(isSubmitButtonDisabled("success", true)).toBe(true);
+  });
+});
+
+describe("isSubmitButtonBusy", () => {
+  it("is true only while submitting", () => {
+    expect(isSubmitButtonBusy("submitting")).toBe(true);
+    expect(isSubmitButtonBusy("idle")).toBe(false);
+    expect(isSubmitButtonBusy("success")).toBe(false);
+    expect(isSubmitButtonBusy("error")).toBe(false);
+    expect(isSubmitButtonBusy("disabled")).toBe(false);
   });
 });

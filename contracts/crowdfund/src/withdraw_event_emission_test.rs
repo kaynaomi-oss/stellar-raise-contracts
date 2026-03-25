@@ -932,6 +932,8 @@ fn first_event_data(env: &Env, t1: &str, t2: &str) -> Option<Val> {
 fn test_withdraw_mints_all_when_within_cap() {
     let count = MAX_NFT_MINT_BATCH - 1;
     let (env, client, _creator, _token, nft_id) = setup_with_nft(count);
+    let (env, client, _creator, _token, nft_id) = setup(count);
+    client.finalize();
     client.withdraw();
 
     let nft = BoundedMockNftClient::new(&env, &nft_id);
@@ -943,6 +945,8 @@ fn test_withdraw_mints_all_when_within_cap() {
 fn test_withdraw_caps_minting_at_max_batch() {
     let count = MAX_NFT_MINT_BATCH + 10;
     let (env, client, _creator, _token, nft_id) = setup_with_nft(count);
+    let (env, client, _creator, _token, nft_id) = setup(count);
+    client.finalize();
     client.withdraw();
 
     let nft = BoundedMockNftClient::new(&env, &nft_id);
@@ -953,6 +957,8 @@ fn test_withdraw_caps_minting_at_max_batch() {
 #[test]
 fn test_withdraw_mints_exactly_at_cap_boundary() {
     let (env, client, _creator, _token, nft_id) = setup_with_nft(MAX_NFT_MINT_BATCH);
+    let (env, client, _creator, _token, nft_id) = setup(MAX_NFT_MINT_BATCH);
+    client.finalize();
     client.withdraw();
 
     let nft = BoundedMockNftClient::new(&env, &nft_id);
@@ -975,6 +981,8 @@ fn test_withdraw_mints_single_contributor() {
 #[test]
 fn test_withdraw_emits_single_batch_event() {
     let (env, client, _creator, _token, _nft_id) = setup_with_nft(5);
+    let (env, client, _creator, _token, _nft_id) = setup(5);
+    client.finalize();
     client.withdraw();
 
     assert_eq!(
@@ -1187,6 +1195,9 @@ fn test_withdraw_no_batch_event_when_no_eligible_contributors() {
 #[test]
 fn test_withdraw_no_fee_event_without_platform_config() {
     let (env, client, _creator, _token) = setup_no_nft(1_000);
+fn test_withdraw_emits_withdrawn_event_once() {
+    let (env, client, _creator, _token, _nft_id) = setup(2);
+    client.finalize();
     client.withdraw();
 
     assert_eq!(
@@ -1202,6 +1213,13 @@ fn test_withdraw_no_fee_event_without_platform_config() {
 #[should_panic(expected = "campaign is not active")]
 fn test_double_withdraw_panics() {
     let (_, client, _creator, _token) = setup_no_nft(1_000);
+fn test_withdraw_no_batch_event_when_no_eligible_contributors() {
+    // Setup with 1 contributor but contribute 0 is blocked by min_contribution.
+    // Instead test with 1 real contributor — after withdraw total_raised is 0
+    // but minted count should be 1 (>0 contribution), so batch event fires.
+    // This test verifies the event count is still exactly 1 (not 0 or >1).
+    let (env, client, _creator, _token, _nft_id) = setup(1);
+    client.finalize();
     client.withdraw();
     client.withdraw(); // must panic
 }

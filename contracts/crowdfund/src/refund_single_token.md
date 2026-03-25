@@ -384,6 +384,7 @@ pub fn refund_single(env: Env, contributor: Address) -> Result<(), ContractError
    typos and ensures the direction cannot be reversed by a caller.
 
 3. **Checks-Effects-Interactions** — The contribution record is zeroed in
+2. **Checks-Effects-Interactions** — The contribution record is zeroed in
    storage *before* the token transfer is executed. This prevents re-entrancy
    and double-claim attacks even if the token contract calls back into the
    crowdfund contract.
@@ -392,6 +393,10 @@ pub fn refund_single(env: Env, contributor: Address) -> Result<(), ContractError
    panicking on underflow rather than silently wrapping.
 
 5. **Status guard** — `Successful` and `Cancelled` campaigns are explicitly
+3. **Overflow protection** — `total_raised` is decremented with `checked_sub`,
+   panicking on underflow rather than silently wrapping.
+
+4. **Status guard** — `Successful` and `Cancelled` campaigns are explicitly
    rejected. A `Refunded` campaign (set by the deprecated batch path) is
    allowed so that any contributor not swept by the batch can still claim.
 

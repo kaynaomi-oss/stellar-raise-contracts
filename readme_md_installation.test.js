@@ -228,6 +228,47 @@ describe('Script Files', () => {
   test('09 - interact.sh is executable', () => {
     expect(fs.statSync(INTERACT_SCRIPT).mode & 0o111).toBeTruthy();
   });
+describe('Prerequisites', () => {
+  test('rustc is installed (stable channel)', () => {
+    const out = run('rustc --version');
+    expect(out).toMatch(/^rustc \d+\.\d+\.\d+/);
+  });
+
+  test('cargo is installed', () => {
+    const out = run('cargo --version');
+    expect(out).toMatch(/^cargo \d+\.\d+\.\d+/);
+  });
+
+  test('wasm32-unknown-unknown target is installed', () => {
+    const out = run('rustup target list --installed');
+    expect(out).toContain('wasm32-unknown-unknown');
+  });
+
+  test('stellar CLI is installed (v20+ rename)', () => {
+    const out = run('stellar --version');
+    expect(out).toContain('stellar-cli');
+  });
+
+  test('Node.js >= 18 is available', () => {
+    const out = run('node --version');
+    const major = parseInt(out.trim().replace('v', ''), 10);
+    expect(major).toBeGreaterThanOrEqual(18);
+  });
+});
+
+// ── Getting Started commands ──────────────────────────────────────────────────
+
+describe('Getting Started', () => {
+  test('cargo build --dry-run succeeds (wasm32 release)', () => {
+    run(
+      'cargo build --release --target wasm32-unknown-unknown -p crowdfund --dry-run',
+      { cwd: ROOT, timeout: 30000 }
+    );
+  }, 35000);
+
+  test('cargo test --no-run compiles test suite', () => {
+    run('cargo test --no-run --workspace', { cwd: ROOT, timeout: 120000, stdio: 'ignore' });
+  }, 130000);
 });
 
 // ── deploy.sh logging bounds ──────────────────────────────────────────────────
@@ -277,6 +318,11 @@ describe('deploy.sh logging bounds', () => {
   test('15 - deploy.sh step=done line includes contract_id field', () => {
     const src = fs.readFileSync(DEPLOY_SCRIPT, 'utf8');
     expect(src).toMatch(/\[LOG\] step=done contract_id=/);
+});
+
+describe('Edge Case — WASM target', () => {
+  test('rustup target list --installed contains wasm32-unknown-unknown', () => {
+    expect(run('rustup target list --installed')).toMatch(/wasm32-unknown-unknown/);
   });
 });
 
@@ -302,6 +348,7 @@ describe('interact.sh logging bounds', () => {
     const parsed = parseLog(lines[0]);
     expect(parsed.reason).toBe('unknown_action');
   });
+});
 
   test('19 - interact.sh contribute action has exactly 2 [LOG] lines in source', () => {
     const src = fs.readFileSync(INTERACT_SCRIPT, 'utf8');

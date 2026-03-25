@@ -436,6 +436,8 @@ fn validate_string_length(
 //!     // ... store title
 //! }
 //! ```
+#![no_std]
+use soroban_sdk::{Env, String};
 
 #![allow(missing_docs)]
 
@@ -472,6 +474,7 @@ pub const MAX_ROADMAP_DESCRIPTION_LENGTH: u32 = 280;
 pub const MAX_METADATA_TOTAL_LENGTH: u32 = 2_304;
 /// Backward-compatible generic string limit used by legacy tests/helpers.
 pub const MAX_STRING_LEN: u32 = 256;
+pub const MAX_CONTRIBUTORS: u32 = 1_000;
 
 /// Maximum byte length of title field.
 pub const MAX_TITLE_LENGTH: u32 = 100;
@@ -561,6 +564,35 @@ pub const MAX_METADATA_TOTAL_LENGTH: u32 = 2304;
 /// @deprecated Use MAX_TITLE_LENGTH instead for new code.
 ///             This constant is kept for backwards compatibility.
 pub const MAX_STRING_LEN: u32 = 256;
+// ── Validation helpers ────────────────────────────────────────────────────────
+
+/// Validates that a title does not exceed MAX_TITLE_LENGTH bytes.
+///
+/// @param title The title string to validate.
+/// @return Ok(()) if the title is within limits, Err with descriptive message otherwise.
+/// @notice Callers should treat errors as permanent rejections; the limit
+///         will not change without a contract upgrade.
+pub fn validate_title(title: &String) -> Result<(), &'static str> {
+    if title.len() > MAX_TITLE_LENGTH {
+        return Err("title exceeds MAX_TITLE_LENGTH bytes");
+    }
+    Ok(())
+}
+
+impl core::fmt::Display for StateSizeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            StateSizeError::ContributorLimitExceeded => {
+                f.write_str("contributor limit exceeded")
+            }
+            StateSizeError::RoadmapLimitExceeded => f.write_str("roadmap limit exceeded"),
+            StateSizeError::StretchGoalLimitExceeded => {
+                f.write_str("stretch goal limit exceeded")
+            }
+            StateSizeError::StringTooLong => f.write_str("string too long"),
+        }
+    }
+}
 
 impl core::fmt::Display for StateSizeError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

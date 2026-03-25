@@ -503,12 +503,19 @@ assert_exit "missing creator exits non-zero with error (req 3.3)" 0 _test_missin
     sed 's/^main "\$@"$/: # stubbed/' "$SCRIPT"
     # Override WASM_PATH after the script body (which re-declares it) so build_contract finds the file
     echo "WASM_PATH=\"$TMP_WASM\""
+  {
+    # Stub cargo and stellar before sourcing so they override any PATH lookup
+    echo 'cargo()   { return 0; }'
+    echo 'stellar() { case "$2" in deploy) echo CXXX;; *) ;; esac; return 0; }'
+    # Inline the deployment script with "main "$@"" replaced by a no-op
+    sed 's/^main "\$@"$/: # stubbed/' "$SCRIPT"
     echo "main GCREATOR GTOKEN 1000 $FUTURE 1"
   } > "$TMP_SCRIPT"
 
   DEPLOY_LOG="$TMP_LOG" NETWORK=testnet bash "$TMP_SCRIPT" &>/dev/null
   local rc=$?
   rm -f "$TMP_SCRIPT" "$TMP_WASM"
+  rm -f "$TMP_SCRIPT"
 
   if [[ $rc -eq 0 ]] && ! grep -q 'stale content' "$TMP_LOG"; then
     rm -f "$TMP_LOG"

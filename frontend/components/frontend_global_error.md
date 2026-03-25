@@ -509,3 +509,4 @@ The boundary complements Next.js custom error pages by handling client-side erro
 - **Plugin System**: Allow custom error handlers and classifiers
 - **Error Context**: Additional metadata collection for better debugging
 - **Recovery Actions**: Configurable recovery strategies per error type
+- **Recovery Actions**: Configurable recovery strategies per error type

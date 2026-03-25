@@ -743,3 +743,4 @@ fn test_execute_does_not_affect_other_contributors() {
 
     assert_eq!(client.contribution(&bob), 15_000);
 }
+}

@@ -354,6 +354,9 @@ fn contribute_below_minimum_returns_amount_too_low() {
     let result = client.try_contribute(&contributor, &(MIN - 1));
     assert_eq!(result.unwrap_err().unwrap(), ContractError::AmountTooLow);
 }
+}
+
+// ── CampaignEnded ─────────────────────────────────────────────────────────────
 
 /// Test: zero amount returns ContractError::AmountTooLow when min > 0.
 #[test]
@@ -506,6 +509,47 @@ fn contribute_to_cancelled_campaign_returns_not_active() {
     );
 }
 
+
+/// Test: Overflow error code constant matches ContractError repr.
+#[test]
+fn contribute_below_minimum_returns_amount_too_low() {
+    let (env, client, contributor, _) = setup();
+    env.ledger().set_timestamp(env.ledger().timestamp() + 1);
+    let result = client.try_contribute(&contributor, &(MIN - 1));
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::AmountTooLow);
+}
+
+/// Test: zero amount returns ContractError::AmountTooLow when min > 0.
+#[test]
+fn contribute_zero_amount_returns_amount_too_low() {
+    let (env, client, contributor, _) = setup();
+    env.ledger().set_timestamp(env.ledger().timestamp() + 1);
+    let result = client.try_contribute(&contributor, &0);
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::AmountTooLow);
+}
+
+/// Test: negative amount returns ContractError::AmountTooLow.
+#[test]
+fn contribute_negative_amount_returns_amount_too_low() {
+    let (env, client, contributor, _) = setup();
+    env.ledger().set_timestamp(env.ledger().timestamp() + 1);
+    let result = client.try_contribute(&contributor, &-1);
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::AmountTooLow);
+}
+
+// ── CampaignEnded (code 2) ────────────────────────────────────────────────────
+
+/// Test: contribution after deadline returns ContractError::CampaignEnded.
+#[test]
+fn contribute_after_deadline_returns_campaign_ended() {
+    let (env, client, contributor, _) = setup();
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + DEADLINE_OFFSET + 1);
+    let result = client.try_contribute(&contributor, &MIN);
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::CampaignEnded);
+}
+
+/// Test: contribution at exactly the deadline timestamp is accepted (strict >).
 #[test]
 fn contribute_to_successful_campaign_returns_not_active() {
     let (env, client, contributor, token_addr) = setup();
@@ -533,6 +577,10 @@ fn contribute_to_successful_campaign_returns_not_active() {
 /// Verifies the Overflow error code constant matches the `#[repr(u32)]` value.
 #[test]
 fn overflow_error_code_matches_enum_repr() {
+// ── Overflow (code 6) — constant correctness ──────────────────────────────────
+
+/// Test: Overflow error code constant matches ContractError repr.
+#[test]
 fn overflow_error_code_matches_contract_error_repr() {
     assert_eq!(contribute_error_handling::error_codes::OVERFLOW, 6);
     assert_eq!(ContractError::Overflow as u32, 6);
@@ -671,6 +719,7 @@ fn describe_error_campaign_not_active() {
             contribute_error_handling::error_codes::CAMPAIGN_NOT_ACTIVE
         ),
         "Campaign is not active"
+        "Contribution amount is below the campaign minimum"
     );
 }
 

@@ -718,6 +718,10 @@ Tests live in:
 - `contracts/crowdfund/src/stellar_token_minter_test.rs` — logging bounds and minter edge cases
 
 ### stellar_token_minter_test coverage
+- `contracts/crowdfund/src/test.rs` (functional)
+- `contracts/crowdfund/src/auth_tests.rs` (authorization)
+- `contracts/crowdfund/src/stellar_token_minter_test.rs` (minter-focused
+  security/readability edge cases)
 
 | Area | Tests |
 |---|---|
@@ -734,6 +738,19 @@ Tests live in:
 | Contribute guards | BelowMinimum, CampaignEnded, ZeroAmount |
 | collect_pledges guards | CampaignStillActive, GoalNotReached |
 | get_stats | empty campaign zeroes, accurate aggregates after contributions |
+
+### Latest token-minter focused test execution
+
+Run command:
+
+```bash
+cargo test --package crowdfund stellar_token_minter_test
+```
+
+Security notes validated by this suite:
+- Deadline/goal gates prevent premature or invalid `collect_pledges`.
+- Upgrade remains admin-gated.
+- Bonus-goal progress is capped at 10,000 bps (100%) for UI safety.
 
 ### Latest token-minter focused test execution
 

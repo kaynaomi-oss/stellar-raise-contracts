@@ -21,6 +21,17 @@ mod refund_single_token;
 
 // --- Modules ---
 pub mod cargo_toml_rust;
+    contract, contractclient, contractimpl, contracttype, token, Address, Env, String,
+    Symbol, Vec,
+};
+
+pub mod crowdfund_initialize_function;
+
+pub mod cargo_toml_rust;
+#[cfg(test)]
+#[path = "cargo_toml_rust.test.rs"]
+mod cargo_toml_rust_test;
+
 pub mod withdraw_event_emission;
 #[cfg(test)]
 mod withdraw_event_emission_test;
@@ -38,6 +49,8 @@ pub mod admin_upgrade_mechanism;
 mod admin_upgrade_mechanism_test;
 
 pub mod admin_upgrade_mechanism;
+
+
 pub mod refund_single_token;
 pub mod soroban_sdk_minor;
 pub mod campaign_goal_minimum;
@@ -114,6 +127,14 @@ pub mod soroban_sdk_minor;
 #[path = "soroban_sdk_minor.test.rs"]
 mod soroban_sdk_minor_test;
 #[cfg(test)]
+#[cfg(test)]
+#[path = "refund_single_token.test.rs"]
+mod refund_single_token_test;
+
+pub mod admin_upgrade_mechanism;
+pub mod soroban_sdk_minor;
+#[cfg(test)]
+mod soroban_sdk_minor_test;
 
 pub mod withdraw_event_emission;
 use withdraw_event_emission::{emit_withdrawal_event, mint_nfts_in_batch};
@@ -124,6 +145,9 @@ mod withdraw_event_emission_test;
 mod stellar_token_minter_test;
 mod soroban_sdk_minor_test;
 
+
+// --- Tests ---
+#[cfg(test)]
 mod test;
 #[cfg(test)]
 mod auth_tests;
@@ -234,6 +258,19 @@ mod contribute_error_handling_tests;
 #[cfg(test)]
 mod proptest_generator_boundary_tests;
 
+#[cfg(test)]
+
+mod crowdfund_initialize_function_test;
+#[cfg(test)]
+mod proptest_generator_boundary;
+#[cfg(test)]
+
+#[path = "proptest_generator_boundary.test.rs"]
+
+mod proptest_generator_boundary_tests;
+pub mod stellar_token_minter;
+#[cfg(test)]
+mod stellar_token_minter_test;
 #[cfg(test)]
 #[path = "admin_upgrade_mechanism.test.rs"]
 mod admin_upgrade_mechanism_test;
@@ -594,6 +631,8 @@ pub struct CampaignInfo {
     AmountTooLow = 9,
     /// Returned when the contribution amount is zero.
     ZeroAmount = 10,
+    NothingToRefund = 7,
+
     /// Returned by `initialize` when `goal < MIN_GOAL_AMOUNT`.
     InvalidGoal = 8,
     /// Returned by `initialize` when `min_contribution < MIN_CONTRIBUTION_AMOUNT`.
@@ -612,6 +651,12 @@ pub struct CampaignInfo {
     GoalTooLow = 8,
     /// Returned when the contribution amount is below the campaign minimum.
     AmountTooLow = 9,
+
+    /// Returned by `contribute` when `amount` is zero.
+    ZeroAmount = 8,
+    BelowMinimum = 9,
+    CampaignNotActive = 10,
+
 }
 
 /// Interface for an external NFT contract used to mint contributor rewards.
@@ -751,6 +796,23 @@ impl CrowdfundContract {
         auto_extension_threshold: Option<i128>,
     ) {
         // Prevent re-initialization.
+    ) -> Result<(), ContractError> {
+
+        execute_initialize(
+            &env,
+            InitParams {
+                admin,
+                creator,
+                token,
+                goal,
+                deadline,
+                min_contribution,
+                platform_config,
+                bonus_goal,
+                bonus_goal_description,
+            },
+        )
+
         if env.storage().instance().has(&DataKey::Creator) {
             return Err(ContractError::AlreadyInitialized);
         }
@@ -1015,6 +1077,9 @@ impl CrowdfundContract {
         for address in addresses.iter() {
             env.storage().instance().set(&DataKey::Whitelist(address), &true);
         }
+
+    }
+
     /// Returns the list of all contributor addresses.
     pub fn contributors(env: Env) -> Vec<Address> {
         env.storage()
@@ -1313,6 +1378,8 @@ impl CrowdfundContract {
         if new_total == hard_cap {
             env.events()
                 .publish(("campaign", "hard_cap_reached"), hard_cap);
+            .set(&DataKey::TotalRaised, &new_total);
+
         if let Some(bg) = env.storage().instance().get::<_, i128>(&DataKey::BonusGoal) {
             let already_emitted = env
                 .storage()
@@ -2342,6 +2409,10 @@ impl CrowdfundContract {
     pub fn refund_single(env: Env, contributor: Address) -> Result<(), ContractError> {
         contributor.require_auth();
 
+    /// # Security
+    /// * Requires `contributor.require_auth()` — only the contributor can claim.
+    /// * Zeroes the contribution record **before** transfer (checks-effects-interactions).
+    /// * Uses `checked_sub` to prevent underflow on `total_raised`.
     /// Claim a refund for a single contributor (pull-based).
     ///
     /// # Errors
@@ -2419,6 +2490,14 @@ impl CrowdfundContract {
             .publish(("campaign", "refund_single"), (contributor.clone(), amount));
 
         Ok(())
+        token_client.transfer(&env.current_contract_address(), &contributor, &amount);
+
+        env.events()
+            .publish(("campaign", "refund_single"), (contributor, amount));
+
+        Ok(())
+    pub fn refund_single(env: Env, contributor: Address) -> Result<(), ContractError> {
+        contributor.require_auth();
         let amount = validate_refund_preconditions(&env, &contributor)?;
         execute_refund_single(&env, &contributor, amount)
     }
@@ -2521,6 +2600,8 @@ impl CrowdfundContract {
     ///
     /// # Panics
     /// * If the caller is not the admin.
+    /// Delegates to [`admin_upgrade_mechanism::upgrade`]. See that module for
+    /// full NatSpec documentation and security assumptions.
     pub fn upgrade(env: Env, new_wasm_hash: soroban_sdk::BytesN<32>) {
         // Gas-efficiency edge case: reject zero hash before any storage read.
         if !admin_upgrade_mechanism::validate_wasm_hash(&new_wasm_hash) {
@@ -3122,6 +3203,7 @@ impl CrowdfundContract {
 
     /// Returns comprehensive campaign statistics.
 
+    /// Returns comprehensive campaign statistics.
     pub fn get_stats(env: Env) -> CampaignStats {
         let total_raised: i128 = env
             .storage()

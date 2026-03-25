@@ -30,6 +30,12 @@ import React, { useMemo, useState } from "react";
  * @title React Submit Button States
  * @notice Typed submit button state model with secure label handling and reliability guards.
  * @dev The component intentionally prefers safe defaults to reduce accidental double submits.
+import React from "react";
+
+/**
+ * @title React Submit Button Component States
+ * @notice Centralized submit-button state model for consistent UX and safe defaults.
+ * @dev Uses strict union types and deterministic state mapping to reduce misuse.
  */
 export type SubmitButtonState = "idle" | "submitting" | "success" | "error" | "disabled";
 
@@ -39,6 +45,8 @@ export type SubmitButtonState = "idle" | "submitting" | "success" | "error" | "d
  * @title Submit Button Labels
  * @notice Optional custom labels for each user-visible state.
  * @notice Optional override labels for each supported state.
+ * @notice Optional override labels for each supported state.
+ * @notice Optional custom labels for each user-visible state.
  */
 export interface SubmitButtonLabels {
   idle?: string;
@@ -93,6 +101,13 @@ export interface ReactSubmitButtonProps {
   strictTransitions?: boolean;
   labels?: SubmitButtonLabels;
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>;
+ * @title Submit Button Props
+ * @notice Defines behavior, labeling, and accessibility requirements.
+ */
+export interface ReactSubmitButtonProps {
+  state: SubmitButtonState;
+  labels?: SubmitButtonLabels;
+  onClick?: () => void | Promise<void>;
   className?: string;
   id?: string;
   type?: "button" | "submit";
@@ -159,6 +174,10 @@ export function normalizeSubmitButtonLabel(candidate: unknown, fallback: string)
 /**
  * @title Label Resolver
  * @notice Returns a safe, non-empty label for the current state.
+/**
+ * @title Safe Label Resolver
+ * @notice Provides a bounded, non-empty label to avoid empty UI text states.
+ * @dev React escapes text content by default; this function only normalizes.
  */
 export function resolveSubmitButtonLabel(
   state: SubmitButtonState,
@@ -247,6 +266,34 @@ export function isSubmitButtonBusy(
   isLocallySubmitting = false,
 ): boolean {
   return state === "submitting" || isLocallySubmitting;
+  const candidate = labels?.[state];
+
+  if (typeof candidate !== "string") {
+    return DEFAULT_LABELS[state];
+  }
+
+  const normalized = candidate.trim();
+  if (!normalized) {
+    return DEFAULT_LABELS[state];
+  }
+
+  return normalized.length > 80 ? `${normalized.slice(0, 77)}...` : normalized;
+}
+
+/**
+ * @title Disabled Guard
+ * @notice Computes final disabled state from explicit disabled flag and workflow state.
+ */
+export function isSubmitButtonDisabled(state: SubmitButtonState, disabled?: boolean): boolean {
+  return Boolean(disabled) || state === "disabled" || state === "submitting";
+}
+
+/**
+ * @title Aria Busy Guard
+ * @notice Announces loading semantics only during active submission.
+ */
+export function isSubmitButtonBusy(state: SubmitButtonState): boolean {
+  return state === "submitting";
 }
 
 const BASE_STYLE: React.CSSProperties = {
@@ -279,6 +326,7 @@ const STATE_STYLE_MAP: Record<SubmitButtonState, React.CSSProperties> = {
     cursor: "not-allowed",
     opacity: 0.9,
   },
+  disabled: { backgroundColor: "#9ca3af", borderColor: "#9ca3af", cursor: "not-allowed", opacity: 0.9 },
 };
 
 // ── Pure helpers (exported for unit testing) ──────────────────────────────────
@@ -396,6 +444,11 @@ const ReactSubmitButton = ({
   state,
   previousState,
   strictTransitions = true,
+ * @notice Reusable submit button with typed state machine for scalable workflows.
+ * @dev Avoids exposing raw HTML injection paths and enforces accessible semantics.
+ */
+const ReactSubmitButton = ({
+  state,
   labels,
   onClick,
   className,
@@ -451,6 +504,9 @@ const ReactSubmitButton = ({
       setIsLocallySubmitting(false);
     }
   };
+  const label = resolveSubmitButtonLabel(state, labels);
+  const computedDisabled = isSubmitButtonDisabled(state, disabled);
+  const ariaBusy = isSubmitButtonBusy(state);
 
   return (
     <button
@@ -476,6 +532,10 @@ const ReactSubmitButton = ({
       style={{
         ...BASE_STYLE,
         ...STATE_STYLE_MAP[resolvedState],
+      onClick={computedDisabled ? undefined : onClick}
+      style={{
+        ...BASE_STYLE,
+        ...STATE_STYLE_MAP[state],
         ...(computedDisabled ? { cursor: "not-allowed", opacity: 0.7 } : {}),
       }}
     >

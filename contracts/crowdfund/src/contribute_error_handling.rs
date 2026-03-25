@@ -84,6 +84,9 @@
 //!          |  2   | `CampaignEnded` | `ledger.timestamp > deadline`                  |
 //!          |  6   | `Overflow`      | `checked_add` would wrap on contribution totals|
 //!          |  9   | `AmountTooLow`  | `amount < min_contribution`                    |
+//! | 11   | `NegativeAmount`     | `amount < 0`                                     |
+//!
+//! # Security assumptions
 //!
 //! - `contributor.require_auth()` is called before any state mutation.
 //! - Negative amounts are rejected before zero/minimum checks to prevent
@@ -121,6 +124,9 @@
 ///
 /// These mirror the `#[repr(u32)]` values of `ContractError` and are intended
 /// for use in off-chain scripts that inspect raw error codes.
+
+/// Numeric error codes returned by the contract host for `contribute()`.
+/// Mirrors `ContractError` repr values for use in off-chain scripts.
 pub mod error_codes {
     /// `contribute()` was called after the campaign deadline.
     pub const CAMPAIGN_ENDED: u32 = 2;
@@ -174,6 +180,7 @@ pub mod error_codes {
 /// assert_eq!(describe_error(error_codes::CAMPAIGN_ENDED), "Campaign has ended");
 /// assert_eq!(describe_error(error_codes::AMOUNT_TOO_LOW), "Amount is below the campaign minimum");
 /// ```
+///
 /// @param  code  The `ContractError` repr value (e.g. from `e as u32`).
 /// @return       A static string suitable for logging or user-facing messages.
 ///
@@ -191,6 +198,7 @@ pub fn describe_error(code: u32) -> &'static str {
         error_codes::ZERO_AMOUNT => "Contribution amount must be greater than zero",
         error_codes::NEGATIVE_AMOUNT => "Contribution amount must not be negative",
         error_codes::AMOUNT_TOO_LOW => "Contribution amount is below the campaign minimum",
+        error_codes::NEGATIVE_AMOUNT => "Contribution amount must not be negative",
         _ => "Unknown error",
     }
 }
@@ -259,6 +267,8 @@ pub fn is_retryable(_code: u32) -> bool {
 ///   state and cannot be resolved by retrying the same call.
 pub fn is_retryable(code: u32) -> bool {
     matches!(code, error_codes::AMOUNT_TOO_LOW | error_codes::ZERO_AMOUNT)
+pub fn is_retryable(_code: u32) -> bool {
+    false
 }
 
 /// Emits a structured diagnostic event for a `contribute()` error.

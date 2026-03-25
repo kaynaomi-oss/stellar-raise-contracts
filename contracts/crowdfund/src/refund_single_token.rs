@@ -70,6 +70,10 @@ use soroban_sdk::{token, Address};
 //!   status, deadline, goal, and contribution balance before any state change.
 //! - **`execute_refund_single`** — atomic CEI (Checks-Effects-Interactions)
 //!   execution: zero storage first, then transfer, then emit event.
+//! - **`refund_single_transfer`** — thin wrapper around `token::Client::transfer`
+//!   that fixes the direction (contract → contributor) to prevent parameter-order
+//!   typos at call sites.
+//!
 //! ## Security Assumptions
 //!
 //! 1. **Authentication** is the caller's responsibility (`contributor.require_auth()`
@@ -80,6 +84,8 @@ use soroban_sdk::{token, Address};
 //!    the function returns `ContractError::Overflow` rather than wrapping.
 //! 4. **Direction lock** — The token transfer explicitly uses the contract's
 //!    address as the sender and the contributor as the recipient.
+//! 4. **Direction lock** — `refund_single_transfer` always transfers
+//!    `contract → contributor`; the direction cannot be reversed by a caller.
 
 #![allow(missing_docs)]
 
@@ -282,6 +288,7 @@ pub fn execute_refund_single(
 use soroban_sdk::{token, Address, Env};
 
 use crate::DataKey;
+    token_client.transfer(contract_address, contributor, &amount);
 }
 
 // ── Precondition guard ────────────────────────────────────────────────────────
@@ -371,6 +378,12 @@ pub fn execute_refund_single(
     
     // Explicitly transfer from contract to contributor
     token_client.transfer(&env.current_contract_address(), contributor, &amount);
+    refund_single_transfer(
+        &token_client,
+        &env.current_contract_address(),
+        contributor,
+        amount,
+    );
 
     env.events()
         .publish(("campaign", "refund_single"), (contributor.clone(), amount));

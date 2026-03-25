@@ -36,6 +36,23 @@ Goals:
 ## State Model
 
 Supported states are strictly typed:
+`react_submit_button.tsx` provides a scalable submit-button state model that standardizes behavior across forms and workflows.
+
+It focuses on:
+
+- predictable state mapping
+- accessibility defaults
+- safer label handling
+- easy extensibility for future states
+
+## File locations
+
+- Component: `frontend/components/react_submit_button.tsx`
+- Tests: `frontend/components/react_submit_button.test.tsx`
+
+## State model
+
+The component supports a strict state union:
 
 - `idle`
 - `submitting`
@@ -43,6 +60,24 @@ Supported states are strictly typed:
 - `error`
 - `disabled`
 
+A transition map enforces allowed movement between states when `strictTransitions` is enabled.
+
+## Security Assumptions
+
+1. Label overrides may originate from untrusted input (CMS, API payloads, operator configuration).
+2. React string rendering is used and no `dangerouslySetInnerHTML` path is exposed.
+3. Consumers may attempt invalid state jumps under race conditions.
+
+## Security and Reliability Safeguards
+
+1. Label normalization rejects non-string values and empty strings.
+2. Control characters are removed and whitespace is normalized.
+3. Labels are truncated to 80 characters to reduce layout abuse.
+4. Invalid state transitions are rejected in strict mode by falling back to the previous valid state.
+5. Interaction is blocked while submitting or locally in-flight to reduce double-submit risk.
+6. `aria-busy` and `aria-live` semantics are set for assistive technology reliability.
+
+## Usage Example
 This ensures only approved states are used in consuming code and avoids ad-hoc string behavior.
 
 ## Security assumptions and safeguards
@@ -258,3 +293,19 @@ Snapshots:   0 total
 - Hostile strings are intentionally preserved as plain text labels to rely on React escaping semantics.
 - The component does not expose raw HTML rendering APIs.
 - If future requirements need rich text labels, add explicit sanitization before rendering.
+## Testing coverage
+
+`react_submit_button.test.tsx` validates:
+
+- default labels per state
+- custom label overrides
+- fallback behavior for invalid labels
+- long-label truncation edge case
+- hostile label string handling assumptions
+- disabled-state logic
+- busy-state logic
+
+## Review notes
+
+- The component exports pure helper functions (`resolveSubmitButtonLabel`, `isSubmitButtonDisabled`, `isSubmitButtonBusy`) to keep tests deterministic and lightweight.
+- Styling is state-mapped via a single lookup table to make future variants easy to add and review.

@@ -199,6 +199,12 @@ fn test_withdraw_mints_nft_for_each_contributor() {
     let (env, client, creator, token_address, token_admin_client) = setup_env();
 /// Helper to mint tokens to an arbitrary contributor.
 fn mint_to(env: &Env, token_address: &Address, admin: &Address, to: &Address, amount: i128) {
+    let creator = Address::generate(&env);
+    token_admin_client.mint(&creator, &10_000_000);
+
+    (env, client, creator, token_address, token_admin)
+}
+
 fn mint_to(env: &Env, token_address: &Address, _admin: &Address, to: &Address, amount: i128) {
     let admin_client = token::StellarAssetClient::new(env, token_address);
     admin_client.mint(to, &amount);
@@ -972,6 +978,7 @@ fn test_set_nft_contract_rejects_non_creator() {
 
 #[test]
 fn test_contribute_after_deadline_panics() {
+fn test_contribute_after_deadline_returns_error() {
     let (env, client, creator, token_address, admin) = setup_env();
     let deadline = env.ledger().timestamp() + 100;
     default_init(&client, &creator, &token_address, deadline);
