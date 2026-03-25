@@ -29,6 +29,11 @@ mod contract_state_size_test;
 pub mod crowdfund_initialize_function;
 use crowdfund_initialize_function::{execute_initialize, InitParams};
 
+pub mod admin_upgrade_mechanism;
+#[cfg(test)]
+#[path = "admin_upgrade_mechanism.test.rs"]
+mod admin_upgrade_mechanism_test;
+
 pub mod refund_single_token;
 use refund_single_token::{
     execute_refund_single, refund_single_transfer, validate_refund_preconditions,
