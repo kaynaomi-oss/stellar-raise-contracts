@@ -75,12 +75,17 @@ pub const MAX_NFT_MINT_BATCH: u32 = 50;
 // ── Data Types ──────────────────────────────────────────────────────────────
 
 /// Represents the campaign status.
+///
+/// Transitions:
+///   `Active` → `Succeeded`  (via `finalize` when deadline passed and goal met)
+///   `Active` → `Expired`    (via `finalize` when deadline passed and goal not met)
+///   `Active` → `Cancelled`  (via `cancel`)
 #[derive(Clone, PartialEq)]
 #[contracttype]
 pub enum Status {
     Active,
-    Successful,
-    Refunded,
+    Succeeded,
+    Expired,
     Cancelled,
 }
 
@@ -593,19 +598,23 @@ impl CrowdfundContract {
         Ok(())
     }
 
-    /// Withdraw raised funds — only callable by the creator after the
-    /// deadline, and only if the goal has been met.
+    /// Finalize the campaign by transitioning it from `Active` to either
+    /// `Succeeded` or `Expired` based on the deadline and total raised.
     ///
-    /// If a platform fee is configured, deducts the fee and transfers it to
-    /// the platform address, then sends the remainder to the creator.
-    pub fn withdraw(env: Env) -> Result<(), ContractError> {
+    /// - `Active → Succeeded`: deadline has passed **and** goal was met.
+    /// - `Active → Expired`:   deadline has passed **and** goal was not met.
+    ///
+    /// Anyone may call this function — it is permissionless and idempotent
+    /// in the sense that it will panic if the campaign is not `Active`.
+    ///
+    /// # Errors
+    /// * Panics if the campaign is not `Active`.
+    /// * Returns `ContractError::CampaignStillActive` if the deadline has not passed.
+    pub fn finalize(env: Env) -> Result<Status, ContractError> {
         let status: Status = env.storage().instance().get(&DataKey::Status).unwrap();
         if status != Status::Active {
             panic!("campaign is not active");
         }
-
-        let creator: Address = env.storage().instance().get(&DataKey::Creator).unwrap();
-        creator.require_auth();
 
         let deadline: u64 = env.storage().instance().get(&DataKey::Deadline).unwrap();
         if env.ledger().timestamp() <= deadline {
@@ -613,11 +622,45 @@ impl CrowdfundContract {
         }
 
         let goal: i128 = env.storage().instance().get(&DataKey::Goal).unwrap();
-        let total: i128 = env.storage().instance().get(&DataKey::TotalRaised).unwrap();
-        if total < goal {
-            return Err(ContractError::GoalNotReached);
+        let total: i128 = env.storage().instance().get(&DataKey::TotalRaised).unwrap_or(0);
+
+        let new_status = if total >= goal {
+            Status::Succeeded
+        } else {
+            Status::Expired
+        };
+
+        env.storage().instance().set(&DataKey::Status, &new_status);
+        env.events().publish(("campaign", "finalized"), new_status.clone());
+
+        Ok(new_status)
+    }
+
+    /// Returns the current stored campaign status.
+    pub fn status(env: Env) -> Status {
+        env.storage().instance().get(&DataKey::Status).unwrap()
+    }
+
+    /// Withdraw raised funds — only callable by the creator after the campaign
+    /// has been finalized as `Succeeded`.
+    ///
+    /// Call `finalize()` first to transition the campaign from `Active` to
+    /// `Succeeded` (deadline passed + goal met). This explicit two-step design
+    /// prevents "state bleeding" where a creator could withdraw while the
+    /// campaign is still technically active.
+    ///
+    /// If a platform fee is configured, deducts the fee and transfers it to
+    /// the platform address, then sends the remainder to the creator.
+    pub fn withdraw(env: Env) -> Result<(), ContractError> {
+        let status: Status = env.storage().instance().get(&DataKey::Status).unwrap();
+        if status != Status::Succeeded {
+            panic!("campaign must be in Succeeded state to withdraw");
         }
 
+        let creator: Address = env.storage().instance().get(&DataKey::Creator).unwrap();
+        creator.require_auth();
+
+        let total: i128 = env.storage().instance().get(&DataKey::TotalRaised).unwrap();
         let token_address: Address = env.storage().instance().get(&DataKey::Token).unwrap();
         let token_client = token::Client::new(&env, &token_address);
 
@@ -642,9 +685,6 @@ impl CrowdfundContract {
         token_client.transfer(&env.current_contract_address(), &creator, &creator_payout);
 
         env.storage().instance().set(&DataKey::TotalRaised, &0i128);
-        env.storage()
-            .instance()
-            .set(&DataKey::Status, &Status::Successful);
 
         // Bounded NFT minting: process at most MAX_NFT_MINT_BATCH contributors
         // per withdraw() call to cap event emission and gas consumption.
@@ -677,19 +717,8 @@ impl CrowdfundContract {
     #[allow(deprecated)]
     pub fn refund(env: Env) -> Result<(), ContractError> {
         let status: Status = env.storage().instance().get(&DataKey::Status).unwrap();
-        if status != Status::Active {
-            panic!("campaign is not active");
-        }
-
-        let deadline: u64 = env.storage().instance().get(&DataKey::Deadline).unwrap();
-        if env.ledger().timestamp() <= deadline {
-            return Err(ContractError::CampaignStillActive);
-        }
-
-        let goal: i128 = env.storage().instance().get(&DataKey::Goal).unwrap();
-        let total: i128 = env.storage().instance().get(&DataKey::TotalRaised).unwrap();
-        if total >= goal {
-            return Err(ContractError::GoalReached);
+        if status != Status::Expired {
+            panic!("campaign must be in Expired state to refund");
         }
 
         let token_address: Address = env.storage().instance().get(&DataKey::Token).unwrap();
@@ -723,9 +752,6 @@ impl CrowdfundContract {
         }
 
         env.storage().instance().set(&DataKey::TotalRaised, &0i128);
-        env.storage()
-            .instance()
-            .set(&DataKey::Status, &Status::Refunded);
 
         Ok(())
     }

@@ -120,6 +120,7 @@ fn count_events_with_topic(env: &Env, t1: &str, t2: &str) -> usize {
 fn test_withdraw_mints_all_when_within_cap() {
     let count = MAX_NFT_MINT_BATCH - 1;
     let (env, client, _creator, _token, nft_id) = setup(count);
+    client.finalize();
     client.withdraw();
 
     let nft = BoundedMockNftClient::new(&env, &nft_id);
@@ -131,6 +132,7 @@ fn test_withdraw_mints_all_when_within_cap() {
 fn test_withdraw_caps_minting_at_max_batch() {
     let count = MAX_NFT_MINT_BATCH + 10;
     let (env, client, _creator, _token, nft_id) = setup(count);
+    client.finalize();
     client.withdraw();
 
     let nft = BoundedMockNftClient::new(&env, &nft_id);
@@ -141,6 +143,7 @@ fn test_withdraw_caps_minting_at_max_batch() {
 #[test]
 fn test_withdraw_mints_exactly_at_cap_boundary() {
     let (env, client, _creator, _token, nft_id) = setup(MAX_NFT_MINT_BATCH);
+    client.finalize();
     client.withdraw();
 
     let nft = BoundedMockNftClient::new(&env, &nft_id);
@@ -151,6 +154,7 @@ fn test_withdraw_mints_exactly_at_cap_boundary() {
 #[test]
 fn test_withdraw_emits_single_batch_event() {
     let (env, client, _creator, _token, _nft_id) = setup(5);
+    client.finalize();
     client.withdraw();
 
     assert_eq!(
@@ -193,6 +197,7 @@ fn test_withdraw_no_batch_event_without_nft_contract() {
     client.contribute(&contributor, &1_000);
 
     env.ledger().set_timestamp(deadline + 1);
+    client.finalize();
     client.withdraw();
 
     assert_eq!(
@@ -205,6 +210,7 @@ fn test_withdraw_no_batch_event_without_nft_contract() {
 #[test]
 fn test_withdraw_emits_withdrawn_event_once() {
     let (env, client, _creator, _token, _nft_id) = setup(2);
+    client.finalize();
     client.withdraw();
 
     assert_eq!(count_events_with_topic(&env, "campaign", "withdrawn"), 1);
@@ -219,6 +225,7 @@ fn test_withdraw_no_batch_event_when_no_eligible_contributors() {
     // but minted count should be 1 (>0 contribution), so batch event fires.
     // This test verifies the event count is still exactly 1 (not 0 or >1).
     let (env, client, _creator, _token, _nft_id) = setup(1);
+    client.finalize();
     client.withdraw();
 
     assert_eq!(

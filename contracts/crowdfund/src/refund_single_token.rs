@@ -28,6 +28,32 @@ use soroban_sdk::{token, Address, Env};
 
 use crate::{ContractError, DataKey, Status};
 
+// ── Storage helpers ───────────────────────────────────────────────────────────
+
+/// Read the stored contribution amount for `contributor` (0 if absent).
+pub fn get_contribution(env: &Env, contributor: &Address) -> i128 {
+    env.storage()
+        .persistent()
+        .get(&DataKey::Contribution(contributor.clone()))
+        .unwrap_or(0)
+}
+
+/// Low-level refund helper: transfer `amount` from contract to `contributor`
+/// and zero the contribution record. Returns the amount transferred.
+///
+/// Does **not** check campaign status or auth — callers are responsible.
+pub fn refund_single(env: &Env, token_address: &Address, contributor: &Address) -> i128 {
+    let amount = get_contribution(env, contributor);
+    if amount > 0 {
+        env.storage()
+            .persistent()
+            .set(&DataKey::Contribution(contributor.clone()), &0i128);
+        let token_client = token::Client::new(env, token_address);
+        refund_single_transfer(&token_client, &env.current_contract_address(), contributor, amount);
+    }
+    amount
+}
+
 // ── Transfer primitive ────────────────────────────────────────────────────────
 
 /// Transfer `amount` tokens from the contract to `contributor`.
@@ -60,34 +86,18 @@ pub fn refund_single_transfer(
 /// @return `Ok(amount)` when the refund is valid, `Err(ContractError)` otherwise.
 ///
 /// # Errors
-/// * `ContractError::CampaignStillActive` — deadline has not yet passed.
-/// * `ContractError::GoalReached`         — goal was met; no refunds available.
+/// * `ContractError::CampaignStillActive` — campaign has not been finalized as `Expired`.
 /// * `ContractError::NothingToRefund`     — contributor has no balance on record.
 ///
 /// # Panics
-/// * `"campaign is not active"` when status is `Successful` or `Cancelled`.
+/// * `"campaign must be in Expired state to refund"` when status is not `Expired`.
 pub fn validate_refund_preconditions(
     env: &Env,
     contributor: &Address,
 ) -> Result<i128, ContractError> {
     let status: Status = env.storage().instance().get(&DataKey::Status).unwrap();
-    if status == Status::Successful || status == Status::Cancelled {
-        panic!("campaign is not active");
-    }
-
-    let deadline: u64 = env.storage().instance().get(&DataKey::Deadline).unwrap();
-    if env.ledger().timestamp() <= deadline {
-        return Err(ContractError::CampaignStillActive);
-    }
-
-    let goal: i128 = env.storage().instance().get(&DataKey::Goal).unwrap();
-    let total: i128 = env
-        .storage()
-        .instance()
-        .get(&DataKey::TotalRaised)
-        .unwrap_or(0);
-    if total >= goal {
-        return Err(ContractError::GoalReached);
+    if status != Status::Expired {
+        panic!("campaign must be in Expired state to refund");
     }
 
     let amount: i128 = env

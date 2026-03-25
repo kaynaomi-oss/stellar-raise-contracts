@@ -138,6 +138,7 @@ fn contribute_to_successful_campaign_returns_not_active() {
     // Advance past deadline and withdraw
     env.ledger()
         .set_timestamp(env.ledger().timestamp() + DEADLINE_OFFSET);
+    client.finalize();
     client.withdraw();
     // Now try to contribute
     let result = client.try_contribute(&contributor, &MIN);

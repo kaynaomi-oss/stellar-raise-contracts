@@ -87,6 +87,7 @@ fn test_withdraw_only_creator_can_withdraw() {
     client.contribute(&contributor, &goal);
 
     env.ledger().set_timestamp(deadline + 1);
+    client.finalize();
     client.withdraw();
 
     assert_eq!(client.total_raised(), 0);
