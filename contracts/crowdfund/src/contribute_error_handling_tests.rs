@@ -27,6 +27,16 @@ use soroban_sdk::{
 //!   - exact-deadline boundary (contribution at deadline timestamp accepted)
 //!   - describe_error / is_retryable helper coverage
 //! Tests for contribute() error handling — typed errors replacing old panics.
+//! Tests for contribute() error handling.
+//!
+//! Covers every typed error path in `contribute()`:
+//!   - `ZeroAmount`     — amount == 0
+//!   - `AmountTooLow`   — amount < min_contribution
+//!   - `CampaignEnded`  — contribution after deadline
+//!   - `Overflow`       — error code constant correctness
+//!   - happy-path sanity check
+//!   - exact-deadline boundary (contribution at deadline timestamp accepted)
+//!   - `describe_error` / `is_retryable` helper coverage
 
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
@@ -296,6 +306,33 @@ fn contribute_accumulates_multiple_contributions() {
     client.contribute(&contributor, &MIN);
     assert_eq!(client.contribution(&contributor), MIN * 2);
     assert_eq!(client.total_raised(), MIN * 2);
+// ── ZeroAmount ────────────────────────────────────────────────────────────────
+
+#[test]
+fn contribute_zero_amount_returns_zero_amount_error() {
+    let (env, client, contributor, _) = setup();
+    env.ledger().set_timestamp(env.ledger().timestamp() + 1);
+    let result = client.try_contribute(&contributor, &0);
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::ZeroAmount);
+}
+
+// ── AmountTooLow ──────────────────────────────────────────────────────────────
+
+#[test]
+fn contribute_below_minimum_returns_amount_too_low() {
+    let (env, client, contributor, _) = setup();
+    env.ledger().set_timestamp(env.ledger().timestamp() + 1);
+    let result = client.try_contribute(&contributor, &(MIN - 1));
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::AmountTooLow);
+}
+
+#[test]
+fn contribute_one_below_minimum_returns_amount_too_low() {
+    let (env, client, contributor, _) = setup();
+    env.ledger().set_timestamp(env.ledger().timestamp() + 1);
+    // MIN - 1 is the boundary just below the threshold
+    let result = client.try_contribute(&contributor, &(MIN - 1));
+    assert_eq!(result.unwrap_err().unwrap(), ContractError::AmountTooLow);
 }
 
 // ── CampaignEnded ─────────────────────────────────────────────────────────────
@@ -448,13 +485,34 @@ fn contribute_to_successful_campaign_returns_not_active() {
 
 // ── Overflow error code constant ──────────────────────────────────────────────
 
+// ── Overflow ──────────────────────────────────────────────────────────────────
+
+/// Verifies the Overflow error code constant matches the `#[repr(u32)]` value.
 #[test]
-fn overflow_error_code_is_correct() {
+fn overflow_error_code_matches_enum_repr() {
     assert_eq!(contribute_error_handling::error_codes::OVERFLOW, 6);
     assert_eq!(ContractError::Overflow as u32, 6);
 }
 
-// ── error_codes helpers ───────────────────────────────────────────────────────
+// ── error_codes constants ─────────────────────────────────────────────────────
+
+#[test]
+fn error_code_constants_match_enum_reprs() {
+    assert_eq!(
+        contribute_error_handling::error_codes::CAMPAIGN_ENDED,
+        ContractError::CampaignEnded as u32
+    );
+    assert_eq!(
+        contribute_error_handling::error_codes::AMOUNT_TOO_LOW,
+        ContractError::AmountTooLow as u32
+    );
+    assert_eq!(
+        contribute_error_handling::error_codes::ZERO_AMOUNT,
+        ContractError::ZeroAmount as u32
+    );
+}
+
+// ── describe_error helpers ────────────────────────────────────────────────────
 
 #[test]
 fn describe_error_campaign_ended() {
@@ -481,6 +539,11 @@ fn describe_error_amount_too_low() {
             contribute_error_handling::error_codes::AMOUNT_TOO_LOW
         ),
         "Contribution amount is below the campaign minimum"
+        "Amount is below the campaign minimum"
+    );
+}
+
+#[test]
 fn describe_error_zero_amount() {
     assert_eq!(
         contribute_error_handling::describe_error(
@@ -517,6 +580,8 @@ fn describe_error_unknown() {
         "Unknown error"
     );
 }
+
+// ── is_retryable helpers ──────────────────────────────────────────────────────
 
 #[test]
 fn is_retryable_returns_false_for_all_known_errors() {
@@ -784,4 +849,21 @@ fn no_error_event_emitted_on_success() {
     ] {
         assert!(!contribute_error_handling::is_retryable(code));
     }
+fn is_retryable_amount_too_low_and_zero_amount_are_retryable() {
+    assert!(contribute_error_handling::is_retryable(
+        contribute_error_handling::error_codes::AMOUNT_TOO_LOW
+    ));
+    assert!(contribute_error_handling::is_retryable(
+        contribute_error_handling::error_codes::ZERO_AMOUNT
+    ));
+}
+
+#[test]
+fn is_retryable_campaign_ended_and_overflow_are_not_retryable() {
+    assert!(!contribute_error_handling::is_retryable(
+        contribute_error_handling::error_codes::CAMPAIGN_ENDED
+    ));
+    assert!(!contribute_error_handling::is_retryable(
+        contribute_error_handling::error_codes::OVERFLOW
+    ));
 }

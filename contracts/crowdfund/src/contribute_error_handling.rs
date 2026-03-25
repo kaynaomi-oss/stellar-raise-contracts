@@ -57,6 +57,16 @@
 //! - `panic!("amount below minimum")` → `ContractError::BelowMinimum` (code 9)
 //! - implicit zero-amount pass-through → `ContractError::ZeroAmount` (code 8)
 //! - no status guard → `ContractError::CampaignNotActive` (code 10)
+//! contribute() error handling — constants, helpers, and off-chain utilities.
+//!
+//! # Error taxonomy for `contribute()`
+//!
+//! | Code | Variant          | Trigger                                          |
+//! |------|------------------|--------------------------------------------------|
+//! |  2   | `CampaignEnded`  | `ledger.timestamp > deadline`                    |
+//! |  6   | `Overflow`       | `checked_add` would wrap on contribution totals  |
+//! |  9   | `AmountTooLow`   | `amount < min_contribution`                      |
+//! | 10   | `ZeroAmount`     | `amount == 0`                                    |
 //!
 //! # Security assumptions
 //!
@@ -67,9 +77,18 @@
 //!   timestamp are accepted.
 //! - Campaign status is checked first, so cancelled/successful campaigns are
 //!   rejected before any other validation.
+//! - Token transfer happens before storage writes; if the transfer fails the
+//!   transaction rolls back atomically — no partial state is persisted.
+//! - Overflow is caught with `checked_add` on both the per-contributor total
+//!   and `total_raised`, returning `ContractError::Overflow` rather than
+//!   wrapping silently.
+//! - The deadline check uses strict `>`, so a contribution at exactly the
+//!   deadline timestamp is accepted — scripts should account for this boundary.
 
 /// Numeric error codes returned by the contract host for `contribute()`.
-/// Mirrors `ContractError` repr values for use in off-chain scripts.
+///
+/// These mirror the `#[repr(u32)]` values of `ContractError` and are intended
+/// for use in off-chain scripts that inspect raw error codes.
 pub mod error_codes {
     /// `contribute()` was called after the campaign deadline.
     pub const CAMPAIGN_ENDED: u32 = 2;
@@ -105,6 +124,20 @@ pub mod error_codes {
 }
 
 /// Returns a human-readable description for a `contribute()` error code.
+    /// The contribution amount is below the campaign minimum.
+    pub const AMOUNT_TOO_LOW: u32 = 9;
+    /// The contribution amount is zero.
+    pub const ZERO_AMOUNT: u32 = 10;
+}
+
+/// Returns a human-readable description for a `contribute()` error code.
+///
+/// # Example
+/// ```
+/// use contribute_error_handling::{describe_error, error_codes};
+/// assert_eq!(describe_error(error_codes::CAMPAIGN_ENDED), "Campaign has ended");
+/// assert_eq!(describe_error(error_codes::AMOUNT_TOO_LOW), "Amount is below the campaign minimum");
+/// ```
 pub fn describe_error(code: u32) -> &'static str {
     match code {
         error_codes::CAMPAIGN_ENDED => "Campaign has ended",
@@ -113,6 +146,8 @@ pub fn describe_error(code: u32) -> &'static str {
         error_codes::BELOW_MINIMUM => "Contribution amount is below the minimum required",
         error_codes::CAMPAIGN_NOT_ACTIVE => "Campaign is not active",
         error_codes::NEGATIVE_AMOUNT => "Contribution amount must not be negative",
+        error_codes::AMOUNT_TOO_LOW => "Amount is below the campaign minimum",
+        error_codes::ZERO_AMOUNT => "Contribution amount must be greater than zero",
         _ => "Unknown error",
     }
 }
@@ -169,4 +204,10 @@ pub fn log_contribute_error(env: &soroban_sdk::Env, error: crate::ContractError)
 /// None of the `contribute()` errors are retryable without a state change.
 pub fn is_retryable(_code: u32) -> bool {
     false
+/// - `AmountTooLow` and `ZeroAmount` are retryable — the caller can submit a
+///   higher amount in a new transaction.
+/// - `CampaignEnded` and `Overflow` are permanent for the current campaign
+///   state and cannot be resolved by retrying the same call.
+pub fn is_retryable(code: u32) -> bool {
+    matches!(code, error_codes::AMOUNT_TOO_LOW | error_codes::ZERO_AMOUNT)
 }

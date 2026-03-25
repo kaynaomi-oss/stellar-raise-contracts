@@ -521,6 +521,10 @@ pub struct CampaignInfo {
     BelowMinimum = 9,
     /// Returned by `contribute` when the campaign is not active.
     CampaignNotActive = 10,
+    /// Returned when the contribution amount is below the campaign minimum.
+    AmountTooLow = 9,
+    /// Returned when the contribution amount is zero.
+    ZeroAmount = 10,
 }
 
 /// Interface for an external NFT contract used to mint contributor rewards.
@@ -1048,6 +1052,15 @@ impl CrowdfundContract {
             return Err(ContractError::CampaignNotActive);
         }
 
+    ///
+    /// # Errors
+    /// * [`ContractError::ZeroAmount`]    – `amount` is zero.
+    /// * [`ContractError::AmountTooLow`]  – `amount` is below `min_contribution`.
+    /// * [`ContractError::CampaignEnded`] – current timestamp is past the deadline.
+    /// * [`ContractError::Overflow`]      – contribution would overflow `i128`.
+    pub fn contribute(env: Env, contributor: Address, amount: i128) -> Result<(), ContractError> {
+        contributor.require_auth();
+
         if amount == 0 {
             return Err(ContractError::ZeroAmount);
         }
@@ -1059,6 +1072,7 @@ impl CrowdfundContract {
             .unwrap();
         if amount < min_contribution {
             return Err(ContractError::BelowMinimum);
+            return Err(ContractError::AmountTooLow);
         }
 
         let deadline: u64 = env.storage().instance().get(&DataKey::Deadline).unwrap();
