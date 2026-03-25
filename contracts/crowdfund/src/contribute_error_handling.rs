@@ -156,11 +156,14 @@ pub mod error_codes {
 /// ```
     pub const ZERO_AMOUNT: u32 = 8;
     /// `amount` was below `min_contribution`.
-    pub const BELOW_MINIMUM: u32 = 9;
+    pub const BELOW_MINIMUM: u32 = 14;
     /// Campaign status is not `Active`.
-    pub const CAMPAIGN_NOT_ACTIVE: u32 = 10;
+    pub const CAMPAIGN_NOT_ACTIVE: u32 = 15;
     /// `amount` was negative.
-    pub const NEGATIVE_AMOUNT: u32 = 11;
+    pub const NEGATIVE_AMOUNT: u32 = 16;
+    /// Alias kept for off-chain scripts that used the old code 9.
+    /// Prefer BELOW_MINIMUM (14).
+    pub const AMOUNT_TOO_LOW: u32 = BELOW_MINIMUM;
 }
 
 /// Returns a human-readable description for a `contribute()` error code.

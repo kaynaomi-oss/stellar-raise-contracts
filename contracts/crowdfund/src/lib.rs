@@ -25,17 +25,11 @@ pub mod cargo_toml_rust;
     Symbol, Vec,
 };
 
-pub mod crowdfund_initialize_function;
+// ── Modules ──────────────────────────────────────────────────────────────────
 
+pub mod admin_upgrade_mechanism;
+pub mod campaign_goal_minimum;
 pub mod cargo_toml_rust;
-#[cfg(test)]
-#[path = "cargo_toml_rust.test.rs"]
-mod cargo_toml_rust_test;
-
-pub mod withdraw_event_emission;
-#[cfg(test)]
-mod withdraw_event_emission_test;
-
 pub mod contract_state_size;
 #[cfg(test)]
 #[path = "contract_state_size.test.rs"]
@@ -51,13 +45,17 @@ mod admin_upgrade_mechanism_test;
 pub mod admin_upgrade_mechanism;
 
 
+pub mod contribute_error_handling;
+pub mod crowdfund_initialize_function;
+pub mod proptest_generator_boundary;
 pub mod refund_single_token;
 pub mod soroban_sdk_minor;
-pub mod campaign_goal_minimum;
-pub mod contribute_error_handling;
-pub mod proptest_generator_boundary;
+pub mod stellar_token_minter;
+pub mod withdraw_event_emission;
 
-// --- Imports from Modules ---
+// ── Imports from modules ──────────────────────────────────────────────────────
+
+use crowdfund_initialize_function::{execute_initialize, InitParams};
 use refund_single_token::{
     execute_refund_single, refund_single_transfer, validate_refund_preconditions,
 };
@@ -142,23 +140,23 @@ mod soroban_sdk_minor_test;
 
 pub mod withdraw_event_emission;
 use withdraw_event_emission::{emit_withdrawal_event, mint_nfts_in_batch};
-#[cfg(test)]
-mod withdraw_event_emission_test;
 
 #[path = "stellar_token_minter_test.rs"]
 mod stellar_token_minter_test;
 mod soroban_sdk_minor_test;
 
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
-// --- Tests ---
 #[cfg(test)]
 mod test;
 #[cfg(test)]
 mod auth_tests;
 #[cfg(test)]
+#[path = "admin_upgrade_mechanism.test.rs"]
+mod admin_upgrade_mechanism_test;
+#[cfg(test)]
 #[path = "campaign_goal_minimum.test.rs"]
 mod campaign_goal_minimum_test;
-pub mod crowdfund_initialize_function;
 #[cfg(test)]
 #[path = "crowdfund_initialize_function.test.rs"]
 mod crowdfund_initialize_function_test;
@@ -271,20 +269,28 @@ mod proptest_generator_boundary_tests;
 
 #[cfg(test)]
 
+#[path = "cargo_toml_rust.test.rs"]
+mod cargo_toml_rust_test;
+#[cfg(test)]
+#[path = "contract_state_size.test.rs"]
+mod contract_state_size_test;
+#[cfg(test)]
+mod contribute_error_handling_tests;
+#[cfg(test)]
+#[path = "crowdfund_initialize_function.test.rs"]
 mod crowdfund_initialize_function_test;
 #[cfg(test)]
-mod proptest_generator_boundary;
-#[cfg(test)]
-
 #[path = "proptest_generator_boundary.test.rs"]
-
 mod proptest_generator_boundary_tests;
-pub mod stellar_token_minter;
+#[cfg(test)]
+#[path = "refund_single_token.test.rs"]
+mod refund_single_token_test;
+#[cfg(test)]
+mod soroban_sdk_minor_test;
 #[cfg(test)]
 mod stellar_token_minter_test;
 #[cfg(test)]
-#[path = "admin_upgrade_mechanism.test.rs"]
-mod admin_upgrade_mechanism_test;
+mod withdraw_event_emission_test;
 
 // --- Constants ---
 const CONTRACT_VERSION: u32 = 3;
@@ -666,10 +672,18 @@ pub struct CampaignInfo {
     AmountTooLow = 9,
 
     /// Returned by `contribute` when `amount` is zero.
-    ZeroAmount = 8,
-    BelowMinimum = 9,
-    CampaignNotActive = 10,
-
+    ZeroAmount = 13,
+    /// Returned by `contribute` when `amount` is below `min_contribution`.
+    BelowMinimum = 14,
+    /// Returned by `contribute` when campaign status is not `Active`.
+    CampaignNotActive = 15,
+    /// Returned by `contribute` or `pledge` when `amount` is negative.
+    NegativeAmount = 16,
+    /// Returned by `contribute` or `pledge` when `amount` is below the minimum.
+    AmountTooLow = 17,
+    /// Returned by `campaign_goal_minimum::validate_goal_amount` when
+    /// `goal < MIN_GOAL_AMOUNT`.
+    GoalTooLow = 18,
 }
 
 /// Interface for an external NFT contract used to mint contributor rewards.
@@ -1103,6 +1117,7 @@ impl CrowdfundContract {
             env.storage().instance().set(&DataKey::Whitelist(address), &true);
         }
 
+        )
     }
 
     /// Returns the list of all contributor addresses.
