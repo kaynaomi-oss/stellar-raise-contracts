@@ -230,6 +230,9 @@ fn init_campaign(
         &None,
         &None,
         &None,
+        &None,
+        &None,
+        &None,
     );
 }
 
@@ -916,6 +919,10 @@ fn test_bonus_goal_event_emitted_exactly_once() {
         &1_000,
         &None,
         &Some(1_000_000i128),
+        &None,
+        &None,
+        &None,
+        &None,
         &None,
     );
 

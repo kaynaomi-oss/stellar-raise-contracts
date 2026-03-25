@@ -133,29 +133,115 @@ Maintainability-focused extraction for `initialize()` validation and persistence
 
 ## What changed
 
-- Added `contracts/crowdfund/src/crowdfund_initialize_function.rs`.
-- Moved `initialize()` validation concerns into:
-  - `validate_initialize_inputs(...)`
-  - `persist_initialize_state(...)`
-- Added focused tests in `contracts/crowdfund/src/crowdfund_initialize_function.test.rs`.
+- Replaced the old `validate_initialize_inputs` / `persist_initialize_state`
+  panic-based helpers with a single `execute_initialize` that returns typed
+  `ContractError` variants.
+- Introduced `InitParams` to eliminate silent parameter-order bugs.
+- Validation now runs entirely before the first storage write (atomic).
+- Added `initialized` event emission for off-chain indexers.
+- Added `describe_init_error` and `is_init_error_retryable` for frontend use.
 
-## Security assumptions and guarantees
+## Validation rules
 
-- `creator.require_auth()` remains enforced in `initialize()`.
-- `goal > 0` and `min_contribution > 0` are now explicit guards.
-- Platform fee guard remains capped at `10_000` bps (100%).
-- Bonus goal must remain strictly greater than primary goal.
-- Bonus-goal description still passes bounded length validation.
+| Parameter         | Rule                                    | Error                   |
+|-------------------|-----------------------------------------|-------------------------|
+| `goal`            | >= 1                                    | `InvalidGoal` (8)       |
+| `min_contribution`| >= 1                                    | `InvalidMinContribution` (9) |
+| `deadline`        | >= `now + 60s`                          | `DeadlineTooSoon` (10)  |
+| `platform_config` | `fee_bps` <= 10 000 when `Some`         | `InvalidPlatformFee` (11) |
+| `bonus_goal`      | > `goal` when `Some`                    | `InvalidBonusGoal` (12) |
+| (re-init guard)   | `DataKey::Creator` must not exist       | `AlreadyInitialized` (1) |
 
-## Test coverage highlights
+## Validation flow
 
-- Rejects zero goal.
-- Rejects zero minimum contribution.
-- Rejects platform fee > 100%.
-- Rejects bonus goal `<= goal`.
-- Verifies expected persisted state for successful initialization.
+```
+execute_initialize(env, params)
+       │
+       ├─► re-initialization guard     → AlreadyInitialized (1)
+       ├─► creator.require_auth()
+       ├─► validate_goal               → InvalidGoal (8)
+       ├─► validate_min_contribution   → InvalidMinContribution (9)
+       ├─► validate_deadline           → DeadlineTooSoon (10)
+       ├─► validate_platform_fee       → InvalidPlatformFee (11)
+       ├─► validate_bonus_goal         → InvalidBonusGoal (12)
+       │
+       └─► [all checks passed] write storage → emit event → Ok(())
+```
 
-## Test command
+## Security assumptions
+
+1. **Re-initialization guard** — `DataKey::Creator` is used as the sentinel.
+   It is the very first check, so no state can be written before it.
+
+2. **Creator authentication** — `creator.require_auth()` is called before any
+   storage write. An unauthorized call cannot leave partial state.
+
+3. **Goal floor** — `goal >= 1` prevents zero-goal campaigns that could be
+   immediately drained by the creator.
+
+4. **Minimum contribution floor** — `min_contribution >= 1` prevents dust
+   attacks and gas waste from zero-amount contributions.
+
+5. **Deadline offset** — `deadline >= now + 60s` ensures the campaign is live
+   for at least one ledger close interval.
+
+6. **Platform fee cap** — `fee_bps <= 10_000` ensures the platform can never
+   take more than 100% of raised funds, preventing creator-payout underflow.
+
+7. **Bonus goal ordering** — `bonus_goal > goal` prevents a bonus goal that is
+   already met at launch, which would immediately emit a bonus event.
+
+8. **Atomic write ordering** — All validations complete before the first
+   `env.storage().instance().set()` call. A failed validation leaves the
+   contract in its pre-initialization state.
+
+## Frontend integration
+
+```typescript
+// 1. Call initialize
+const result = await contract.initialize({
+  admin,
+  creator,
+  token,
+  goal: 1_000_000n,
+  deadline: BigInt(Math.floor(Date.now() / 1000) + 3600),
+  min_contribution: 1_000n,
+  platform_config: null,
+  bonus_goal: null,
+  bonus_goal_description: null,
+  metadata_uri: null,
+});
+
+// 2. On failure, map the error code
+if (result.isErr()) {
+  const code = result.error.value;
+  const message = describeInitError(code); // use describe_init_error mapping
+  const canRetry = isInitErrorRetryable(code);
+}
+```
+
+Error code → message mapping (mirrors `describe_init_error`):
+
+| Code | Message |
+|------|---------|
+| 1    | Contract is already initialized |
+| 8    | Campaign goal must be at least 1 |
+| 9    | Minimum contribution must be at least 1 |
+| 10   | Deadline must be at least 60 seconds in the future |
+| 11   | Platform fee cannot exceed 100% (10,000 bps) |
+| 12   | Bonus goal must be strictly greater than the primary goal |
+
+## Scalability
+
+- `initialize()` is a one-shot O(1) function regardless of future campaign size.
+- `Contributors` and `Roadmap` are seeded as empty vectors; their TTL is
+  managed by `contribute()` and `add_roadmap_item()`.
+- The `initialized` event payload is bounded to scalar values only — never
+  unbounded collections.
+
+## Test coverage
+
+Run the module-specific tests:
 
 ```bash
 cargo test --package crowdfund crowdfund_initialize_function_test

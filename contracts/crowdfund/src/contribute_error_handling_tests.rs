@@ -92,6 +92,9 @@ fn setup() -> (Env, CrowdfundContractClient<'static>, Address, Address) {
         &None,
         &None,
         &None,
+        &None,
+        &None,
+        &None,
     );
 
     (env, client, contributor)
@@ -522,6 +525,12 @@ fn contribute_below_minimum_returns_below_minimum() {
     let result = client.try_contribute(&contributor, &(MIN - 1));
     assert_eq!(result.unwrap_err().unwrap(), ContractError::BelowMinimum);
 }
+
+// ── CampaignNotActive (code 15) ───────────────────────────────────────────────
+
+/// Test: contribution after campaign is withdrawn returns CampaignNotActive.
+#[test]
+fn contribute_after_withdraw_returns_campaign_not_active() {
     let (env, client, contributor, token_addr) = setup();
     env.ledger().set_timestamp(env.ledger().timestamp() + 1);
     // Fund to goal

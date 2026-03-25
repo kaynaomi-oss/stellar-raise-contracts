@@ -613,6 +613,8 @@ fn default_init(
         &deadline,
         &1_000,
         &None,
+        &None,
+        &None,
     );
 }
 
@@ -1460,6 +1462,8 @@ fn test_initialize_already_initialized() {
         &deadline,
         &1_000,
         &None,
+        &None,
+        &None,
     );
 
     assert_eq!(
@@ -1531,6 +1535,8 @@ fn test_initialize_zero_goal() {
         &deadline,
         &1_000,
         &None,
+        &None,
+        &None,
     );
 
     assert_eq!(client.goal(), 0);
@@ -1549,6 +1555,8 @@ fn test_initialize_zero_min_contribution() {
         &1_000_000,
         &deadline,
         &0,
+        &None,
+        &None,
         &None,
     );
 

@@ -755,7 +755,7 @@ fn test_admin_upgrade_validation() {
     let contract_id = env.register(CrowdfundContract, ());
     let client = CrowdfundContractClient::new(&env, &contract_id);
 
-    client.initialize(&admin, &creator, &token, &1000i128, &10000u64, &10i128, &None, &None, &None);
+    client.initialize(&admin, &creator, &token, &1000i128, &10000u64, &10i128, &None, &None, &None, &None);
 
     let new_wasm_hash = BytesN::from_array(&env, &[1u8; 32]);
 
@@ -780,7 +780,7 @@ fn test_unauthorized_upgrade_fail() {
     let contract_id = env.register(CrowdfundContract, ());
     let client = CrowdfundContractClient::new(&env, &contract_id);
 
-    client.initialize(&admin, &creator, &token, &1000i128, &10000u64, &10i128, &None, &None, &None);
+    client.initialize(&admin, &creator, &token, &1000i128, &10000u64, &10i128, &None, &None, &None, &None);
 
     let new_wasm_hash = BytesN::from_array(&env, &[1u8; 32]);
 
