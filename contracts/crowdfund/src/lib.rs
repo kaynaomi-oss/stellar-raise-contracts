@@ -1275,3 +1275,4 @@ impl CrowdfundContract {
         env.storage().instance().get(&DataKey::NFTContract)
     }
 }
+}

@@ -14,7 +14,8 @@ Thumbs.db
 .DS_Store?
 ._*
 
-# Soroban / Rust
+# Soroban / Stellar
+.soroban/
 *.d
 *.wasm
 !contracts/factory/wasm/crowdfund.wasm
