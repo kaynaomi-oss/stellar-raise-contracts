@@ -464,24 +464,47 @@ pub fn persist_initialize_state(
 //!            a strict checks → effects → storage write ordering.
 //!          - `describe_init_error()` / `is_init_error_retryable()` — helpers
 //!            for off-chain scripts and frontend error handling.
+//! # crowdfund_initialize_function
 //!
-//! ## Design Decisions
+//! @title   CrowdfundInitializeFunction — Optimized initialization logic for
+//!          the crowdfund contract with improved performance and security.
 //!
-//! ### Why a separate `InitParams` struct?
+//! @notice  This module provides the canonical implementation of campaign
+//!          initialization, extracted from `lib.rs` for auditability and
+//!          testability. It delivers:
 //!
-//! The original `initialize()` accepted nine positional arguments.  Positional
-//! argument lists are fragile: swapping two `i128` parameters compiles silently
-//! but produces incorrect state.  A named struct makes every field explicit at
-//! the call site and allows the compiler to catch type mismatches.
+//!          - A validated `InitParams` struct replacing nine positional args.
+//!          - Pure validation helpers returning typed `ContractError` variants.
+//!          - A deterministic single-pass initialization flow with strict
+//!            checks → effects → storage write ordering.
+//!          - An `InitializedEvent` payload for off-chain indexers.
+//!          - Helper functions for frontend error mapping.
 //!
-//! ### Why typed errors instead of panics?
+//! @dev     This module is `no_std`-compatible and has no dependency on the
+//!          contract's `#[contractimpl]` block, enabling use in off-chain
+//!          tooling and property-based tests without a full Soroban environment.
+//!
+//! ## Performance Optimizations
+//!
+//! 1. **Early validation exit** — Uses `?` operator for short-circuit error
+//!    propagation instead of nested `if let Err` blocks.
+//!
+//! 2. **Inline hints** — Validation helpers are marked `#[inline]` to allow
+//!    the compiler to specialize call sites and eliminate stack frames.
+//!
+//! 3. **Batched validation** — All parameter checks run in a single
+//!    `validate_init_params()` call, reducing function call overhead.
 //!
 //! Panics are opaque to the frontend — the SDK surfaces them as a generic host
 //! error with no numeric code.  Typed `ContractError` variants let the frontend
 //! display a specific message (e.g. "Platform fee exceeds 100%") without
 //! parsing error strings.
+//! 4. **Storage write batching** — All required storage writes are grouped
+//!    together with only necessary conditional writes for optional fields.
 //!
-//! ### Why emit an `initialized` event?
+//! 5. **Optimized re-initialization guard** — Uses a single `has()` check on
+//!    `DataKey::Creator` as the initialization sentinel, avoiding extra
+//!    storage lookups.
 //!
 //! Soroban storage is not directly queryable by off-chain services without an
 //! RPC call per field.  An `initialized` event carries all campaign parameters
@@ -493,15 +516,17 @@ pub fn persist_initialize_state(
 //! Interleaving validation and storage writes risks leaving the contract in a
 //! partially-initialized state if a later check fails.  This module validates
 //! all parameters first, then writes atomically.
+//! 6. **Event emission last** — Event is only emitted after all storage
+//!    writes succeed, ensuring consistency.
 //!
 //! ## Security Assumptions
 //!
 //! 1. **Re-initialization guard** — `DataKey::Creator` is used as the
-//!    initialization sentinel.  The check is the very first operation so no
+//!    initialization sentinel. The check is the very first operation so no
 //!    state can be written before it.
 //!
 //! 2. **Creator authentication** — `creator.require_auth()` is called before
-//!    any storage write.  The Soroban host rejects the transaction if the
+//!    any storage write. The Soroban host rejects the transaction if the
 //!    creator's signature is absent or invalid.
 //!
 //! 3. **Goal floor** — `goal >= MIN_GOAL_AMOUNT (1)` prevents zero-goal
@@ -517,11 +542,10 @@ pub fn persist_initialize_state(
 //!    the platform can never be configured to take more than 100% of raised funds.
 //!
 //! 7. **Bonus goal ordering** — `bonus_goal > goal` prevents a bonus goal that
-//!    is already met at launch, which would immediately emit a bonus event and
-//!    confuse contributors.
+//!    is already met at launch, which would immediately emit a bonus event.
 //!
 //! 8. **Atomic write ordering** — All validations complete before the first
-//!    `env.storage().instance().set()` call.  A failed validation leaves the
+//!    `env.storage().instance().set()` call. A failed validation leaves the
 //!    contract in its pre-initialization state.
 //!
 //! ## Validation Flow
@@ -536,6 +560,12 @@ pub fn persist_initialize_state(
 //!        ├─► validate_deadline(now, dl)  → DeadlineTooSoon
 //!        ├─► validate_platform_fee(bps)  → InvalidPlatformFee
 //!        ├─► validate_bonus_goal(bg, g)  → InvalidBonusGoal
+//!        ├─► validate_goal(goal)            → InvalidGoal
+//!        ├─► validate_min_contribution(mc)  → InvalidMinContribution
+//!        ├─► validate_deadline(now, dl)     → DeadlineTooSoon
+//!        ├─► validate_platform_fee(bps)     → InvalidPlatformFee
+//!        ├─► validate_bonus_goal(bg, goal) → InvalidBonusGoal
+//!        ├─► validate_bonus_goal_description(desc) → InvalidBonusGoalDescription
 //!        │
 //!        └─► [all checks passed] write storage → emit event → Ok(())
 //! ```
@@ -554,6 +584,13 @@ pub fn persist_initialize_state(
 //! - `Contributors` and `Roadmap` are seeded as empty vectors; their TTL is
 //!   managed by `contribute()` and `add_roadmap_item()`.
 //! - The `initialized` event payload is bounded to scalar values only.
+//! The frontend should:
+//!
+//! 1. Call `initialize()` with a fully-populated set of parameters.
+//! 2. On success, listen for the `("campaign", "initialized")` event to
+//!    confirm the campaign is live and cache the emitted parameters.
+//! 3. On failure, map the returned `ContractError` code to a user message
+//!    using the `describe_init_error()` helper exported from this module.
 
 #[allow(dead_code)]
 
@@ -562,7 +599,7 @@ use soroban_sdk::{Address, Env, String, Symbol, Vec};
 use crate::campaign_goal_minimum::{
     validate_deadline, validate_goal, validate_min_contribution, validate_platform_fee,
 };
-use crate::{ContractError, DataKey, PlatformConfig, RoadmapItem, Status};
+use crate::{contract_state_size, ContractError, DataKey, PlatformConfig, RoadmapItem, Status};
 
 // ── InitParams ────────────────────────────────────────────────────────────────
 
@@ -571,6 +608,9 @@ use crate::{ContractError, DataKey, PlatformConfig, RoadmapItem, Status};
 /// @dev Using a named struct instead of positional arguments prevents silent
 ///      parameter-order bugs (e.g. swapping two `i128` fields compiles but
 ///      produces incorrect state).
+///
+/// # Type Parameters
+/// * `T` - Any type that implements the required trait bounds for Address
 #[derive(Clone)]
 pub struct InitParams {
     /// The admin address authorized to upgrade the contract.
@@ -582,7 +622,7 @@ pub struct InitParams {
 
     /// The campaign creator's address.
     ///
-    /// @notice Must authorize the `initialize()` call.  Stored as the
+    /// @notice Must authorize the `initialize()` call. Stored as the
     ///         re-initialization sentinel.
     pub creator: Address,
 
@@ -604,7 +644,7 @@ pub struct InitParams {
 
     /// The minimum contribution amount in the token's smallest unit.
     ///
-    /// @notice Must be >= `MIN_CONTRIBUTION_AMOUNT` (1).  Setting this to a
+    /// @notice Must be >= `MIN_CONTRIBUTION_AMOUNT` (1). Setting this to a
     ///         meaningful value (e.g. 1_000 stroops) prevents dust attacks.
     pub min_contribution: i128,
 
@@ -617,17 +657,19 @@ pub struct InitParams {
 
     /// Optional secondary bonus goal threshold.
     ///
-    /// @notice When `Some`, must be strictly greater than `goal`.  Reaching
+    /// @notice When `Some`, must be strictly greater than `goal`. Reaching
     ///         this threshold emits a `bonus_goal_reached` event exactly once.
     pub bonus_goal: Option<i128>,
 
     /// Optional human-readable description for the bonus goal.
     ///
     /// @notice Stored as-is.  The frontend should enforce a reasonable display limit.
+    /// @notice Stored as-is; no length validation is enforced at the contract
+    ///         level. The frontend should enforce a reasonable display limit.
     pub bonus_goal_description: Option<String>,
 }
 
-// ── Validation helpers ────────────────────────────────────────────────────────
+// ── Validation helpers ───────────────────────────────────────────────────────
 
 /// Validates that `bonus_goal`, when present, is strictly greater than `goal`.
 ///
@@ -638,11 +680,34 @@ pub struct InitParams {
 /// @dev    A bonus goal equal to the primary goal would be met simultaneously,
 ///         making it meaningless.  A bonus goal below the primary goal would be
 ///         met before the campaign succeeds, which is logically inconsistent.
+/// @dev    A bonus goal equal to the primary goal would be met at the same
+///         time as the campaign goal, making it meaningless. A bonus goal
+///         below the primary goal would be met before the campaign succeeds,
+///         which is logically inconsistent.
 #[inline]
 pub fn validate_bonus_goal(bonus_goal: Option<i128>, goal: i128) -> Result<(), ContractError> {
     if let Some(bg) = bonus_goal {
         if bg <= goal {
             return Err(ContractError::InvalidBonusGoal);
+        }
+    }
+    Ok(())
+}
+
+/// Validates the bonus goal description length if present.
+///
+/// @param  description  The optional bonus goal description.
+/// @return              `Ok(())` if valid or absent; `Err(ContractError::InvalidBonusGoalDescription)` otherwise.
+///
+/// @dev    Description length validation prevents unbounded state growth
+///         that could increase storage costs and impact contract performance.
+#[inline]
+pub fn validate_bonus_goal_description(
+    description: &Option<String>,
+) -> Result<(), ContractError> {
+    if let Some(desc) = description {
+        if let Err(err) = contract_state_size::validate_bonus_goal_description(desc) {
+            return Err(ContractError::InvalidBonusGoalDescription);
         }
     }
     Ok(())
@@ -656,16 +721,22 @@ pub fn validate_bonus_goal(bonus_goal: Option<i128>, goal: i128) -> Result<(), C
 ///
 /// @dev    Validation order matches the storage write order in `execute_initialize()`
 ///         so that error codes are predictable and auditable.
+/// @dev    Validation order matches the storage write order in
+///         `execute_initialize()` so that error codes are predictable.
+///         Uses short-circuit evaluation via `?` operator for efficiency.
+#[inline]
 pub fn validate_init_params(env: &Env, params: &InitParams) -> Result<(), ContractError> {
-    validate_goal(params.goal).map_err(|_| ContractError::InvalidGoal)?;
-    validate_min_contribution(params.min_contribution)
-        .map_err(|_| ContractError::InvalidMinContribution)?;
-    validate_deadline(env.ledger().timestamp(), params.deadline)
-        .map_err(|_| ContractError::DeadlineTooSoon)?;
+    validate_goal(params.goal)?;
+    validate_min_contribution(params.min_contribution)?;
+    validate_deadline(env.ledger().timestamp(), params.deadline)?;
+    
     if let Some(ref config) = params.platform_config {
-        validate_platform_fee(config.fee_bps).map_err(|_| ContractError::InvalidPlatformFee)?;
+        validate_platform_fee(config.fee_bps)?;
     }
+    
     validate_bonus_goal(params.bonus_goal, params.goal)?;
+    validate_bonus_goal_description(&params.bonus_goal_description)?;
+    
     Ok(())
 }
 
@@ -674,7 +745,7 @@ pub fn validate_init_params(env: &Env, params: &InitParams) -> Result<(), Contra
 /// Executes the full campaign initialization flow.
 ///
 /// @notice This is the single authoritative implementation of campaign
-///         initialization.  `CrowdfundContract::initialize()` in `lib.rs`
+///         initialization. `CrowdfundContract::initialize()` in `lib.rs`
 ///         delegates to this function after constructing `InitParams`.
 ///
 /// @param  env     The Soroban execution environment.
@@ -695,6 +766,13 @@ pub fn validate_init_params(env: &Env, params: &InitParams) -> Result<(), Contra
 pub fn execute_initialize(env: &Env, params: InitParams) -> Result<(), ContractError> {
     // ── 1. Re-initialization guard ────────────────────────────────────────
     // Must be the very first check so no state can be written before it.
+///            is never deleted. Using a dedicated `Initialized` key would
+///            require an extra storage slot and could be confused with other
+///            boolean flags.
+pub fn execute_initialize(env: &Env, params: InitParams) -> Result<(), ContractError> {
+    // ── 1. Re-initialization guard ────────────────────────────────────────
+    // Single storage read to check if contract is already initialized.
+    // This is the first operation to ensure no state is written on failure.
     if env.storage().instance().has(&DataKey::Creator) {
         return Err(ContractError::AlreadyInitialized);
     }
@@ -705,12 +783,16 @@ pub fn execute_initialize(env: &Env, params: InitParams) -> Result<(), ContractE
     params.creator.require_auth();
 
     // ── 3. Parameter validation ───────────────────────────────────────────
-    // All checks run before the first storage write.  A failed check leaves
+    // All checks run before the first storage write. A failed check leaves
     // the contract in its pre-initialization state.
     validate_init_params(env, &params)?;
 
     // ── 4. Storage writes ─────────────────────────────────────────────────
     // Admin stored first so upgrade authorization is available immediately.
+    // All required fields are written first (atomic on success).
+    // Optional fields are written conditionally only if present.
+
+    // Admin — stored first so upgrade authorization is available immediately.
     env.storage()
         .instance()
         .set(&DataKey::Admin, &params.admin);
@@ -783,6 +865,20 @@ pub fn execute_initialize(env: &Env, params: InitParams) -> Result<(), ContractE
         params.goal,
         params.deadline,
         params.min_contribution,
+    // Emit a structured event so off-chain indexers can reconstruct campaign
+    // state from the event stream without polling individual storage keys.
+    env.events().publish(
+        (
+            soroban_sdk::Symbol::new(env, "campaign"),
+            soroban_sdk::Symbol::new(env, "initialized"),
+        ),
+        (
+            params.creator.clone(),
+            params.token.clone(),
+            params.goal,
+            params.deadline,
+            params.min_contribution,
+        ),
     );
 
     Ok(())
@@ -839,6 +935,12 @@ pub fn log_initialize(
 ///
 /// @dev    Off-chain scripts and frontends should use this instead of hardcoding
 ///         strings so that a future code change only requires updating this function.
+/// @param  code  The numeric `ContractError` repr value.
+/// @return       A static string suitable for display in a frontend error message.
+///
+/// @dev    The frontend should call this with `error as u32` after receiving
+///         a typed error from the SDK client.
+#[inline]
 pub fn describe_init_error(code: u32) -> &'static str {
     match code {
         1 => "Contract is already initialized",
@@ -861,6 +963,10 @@ pub fn describe_init_error(code: u32) -> &'static str {
 ///         re-initialized.  All other init errors are input validation failures
 ///         that the caller can fix and retry.
 pub fn is_init_error_retryable(code: u32) -> bool {
+#[inline]
+pub fn is_init_error_retryable(code: u32) -> bool {
+    // AlreadyInitialized (1) is permanent — the contract cannot be re-initialized.
+    // All other init errors are input validation failures that the caller can fix.
     matches!(code, 8 | 9 | 10 | 11 | 12)
 }
 
@@ -868,6 +974,97 @@ pub fn is_init_error_retryable(code: u32) -> bool {
 
 /// Re-exports `MIN_GOAL_AMOUNT` for callers that only import this module.
 pub use crate::campaign_goal_minimum::MIN_GOAL_AMOUNT as INIT_MIN_GOAL_AMOUNT;
+
+// ── Validation helpers for panic-based initialization ──────────────────────
+
+/// @notice Validates initialization inputs and panics on invalid configuration.
+/// @dev Panics preserve existing contract behavior for callers that rely on
+///      fail-fast initialization checks. Used by the contract's initialize()
+///      entry point for backward compatibility.
+pub fn validate_initialize_inputs(
+    goal: i128,
+    min_contribution: i128,
+    platform_config: &Option<PlatformConfig>,
+    bonus_goal: Option<i128>,
+    bonus_goal_description: &Option<String>,
+) {
+    if goal <= 0 {
+        panic!("goal must be positive");
+    }
+    if min_contribution <= 0 {
+        panic!("min contribution must be positive");
+    }
+
+    if let Some(config) = platform_config {
+        if config.fee_bps > 10_000 {
+            panic!("platform fee cannot exceed 100%");
+        }
+    }
+
+    if let Some(bg) = bonus_goal {
+        if bg <= goal {
+            panic!("bonus goal must be greater than primary goal");
+        }
+    }
+
+    if let Some(description) = bonus_goal_description {
+        if let Err(err) = contract_state_size::validate_bonus_goal_description(description) {
+            panic!("{}", err);
+        }
+    }
+}
+
+/// @notice Persists initialize() state in one place for easier audits.
+/// @dev   This function is called by the contract's initialize() entry point
+///        after validation passes. It writes all state in a specific order
+///        to ensure atomicity and consistency.
+pub fn persist_initialize_state(
+    env: &Env,
+    admin: &Address,
+    creator: &Address,
+    token: &Address,
+    goal: i128,
+    deadline: u64,
+    min_contribution: i128,
+    platform_config: &Option<PlatformConfig>,
+    bonus_goal: Option<i128>,
+    bonus_goal_description: &Option<String>,
+) {
+    // Required fields — always written.
+    env.storage().instance().set(&DataKey::Admin, admin);
+    env.storage().instance().set(&DataKey::Creator, creator);
+    env.storage().instance().set(&DataKey::Token, token);
+    env.storage().instance().set(&DataKey::Goal, &goal);
+    env.storage().instance().set(&DataKey::Deadline, &deadline);
+    env.storage()
+        .instance()
+        .set(&DataKey::MinContribution, &min_contribution);
+    env.storage().instance().set(&DataKey::TotalRaised, &0i128);
+    env.storage()
+        .instance()
+        .set(&DataKey::BonusGoalReachedEmitted, &false);
+    env.storage().instance().set(&DataKey::Status, &Status::Active);
+
+    // Optional fields — only written when present.
+    if let Some(config) = platform_config {
+        env.storage().instance().set(&DataKey::PlatformConfig, config);
+    }
+    if let Some(bg) = bonus_goal {
+        env.storage().instance().set(&DataKey::BonusGoal, &bg);
+    }
+    if let Some(description) = bonus_goal_description {
+        env.storage()
+            .instance()
+            .set(&DataKey::BonusGoalDescription, description);
+    }
+
+    // Seed empty collections.
+    let empty_contributors: Vec<Address> = Vec::new(env);
+    env.storage()
+        .persistent()
+        .set(&DataKey::Contributors, &empty_contributors);
+
+    let empty_roadmap: Vec<RoadmapItem> = Vec::new(env);
     env.storage().instance().set(&DataKey::Roadmap, &empty_roadmap);
 }
 
@@ -1057,3 +1254,7 @@ pub fn validate_initialization_params_bool(
     validate_initialization_params(env, goal, deadline, min_contribution, None, None).is_ok()
 }
 
+    env.storage()
+        .instance()
+        .set(&DataKey::Roadmap, &empty_roadmap);
+}
