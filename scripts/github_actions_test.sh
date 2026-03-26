@@ -133,7 +133,16 @@ else
   pass "rust_ci.yml WASM build step has timeout-minutes bound"
 fi
 
-# ── Check 11: rust_ci.yml includes elapsed-time logging step ──────────────────
+# ── Check 11: rust_ci.yml test step has a timeout-minutes bound ───────────────
+
+test_timeout=$(awk '/Run tests|run tests/,/run:/' "$WORKFLOWS_DIR/rust_ci.yml" | grep -c "timeout-minutes:" || true)
+if [[ "$test_timeout" -eq 0 ]]; then
+  fail "rust_ci.yml test step is missing timeout-minutes"
+else
+  pass "rust_ci.yml test step has timeout-minutes bound"
+fi
+
+# ── Check 12: rust_ci.yml includes elapsed-time logging step ──────────────────
 
 if ! grep -qE "elapsed|JOB_START" "$WORKFLOWS_DIR/rust_ci.yml"; then
   fail "rust_ci.yml is missing elapsed-time logging step"

@@ -254,11 +254,51 @@ jobs:
       - name: Build crowdfund WASM for tests
         timeout-minutes: 10
         run: cargo build --release --target wasm32-unknown-unknown -p crowdfund
+      - name: Run tests including property-based tests
+        timeout-minutes: 15
+        run: cargo test --workspace
 EOF
 echo "name: Smoke"      > "$tmpdir11/.github/workflows/testnet_smoke.yml"
 echo "name: Spellcheck" > "$tmpdir11/.github/workflows/spellcheck.yml"
 
 assert_exit "fails when rust_ci.yml has no elapsed-time logging" 1 bash -c "cd '$tmpdir11' && bash '$OLDPWD/$SCRIPT'"
+
+# ── Test 13: fails when rust_ci.yml test step has no timeout-minutes ──────────
+
+tmpdir12=$(mktemp -d)
+trap 'rm -rf "$tmpdir12"' EXIT
+
+mkdir -p "$tmpdir12/.github/workflows"
+cat > "$tmpdir12/.github/workflows/rust_ci.yml" <<'EOF'
+name: Rust CI
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Record job start time
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - name: Build crowdfund WASM for tests
+        timeout-minutes: 10
+        run: cargo build --release --target wasm32-unknown-unknown -p crowdfund
+      - name: Run tests including property-based tests
+        run: cargo test --workspace
+      - name: Log total job elapsed time
+        if: always()
+        run: |
+          END=$(date +%s)
+          ELAPSED=$(( END - JOB_START ))
+          echo "Total job time: ${ELAPSED}s"
+EOF
+echo "name: Smoke"      > "$tmpdir12/.github/workflows/testnet_smoke.yml"
+echo "name: Spellcheck" > "$tmpdir12/.github/workflows/spellcheck.yml"
+
+assert_exit "fails when rust_ci.yml test step has no timeout-minutes" 1 bash -c "cd '$tmpdir12' && bash '$OLDPWD/$SCRIPT'"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 

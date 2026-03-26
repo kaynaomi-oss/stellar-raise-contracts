@@ -107,8 +107,8 @@ Key speed optimisations:
 
 | Script | Purpose |
 |---|---|
-| `scripts/github_actions_test.sh` | Validates workflow files in CI or locally (8 checks) |
-| `scripts/github_actions_test.test.sh` | Tests the validator against pass/fail scenarios (9 tests) |
+| `scripts/github_actions_test.sh` | Validates workflow files in CI or locally (12 checks) |
+| `scripts/github_actions_test.test.sh` | Tests the validator against pass/fail scenarios (13 tests) |
 
 Run locally:
 
@@ -125,12 +125,16 @@ Three changes improve observability and prevent runaway builds:
 |---|---|---|
 | Job hard timeout | `jobs.check.timeout-minutes` | 30 min |
 | WASM build step timeout | `Build crowdfund WASM for tests` step | 10 min |
-| Test step timeout | `Run tests` step | 15 min |
+| Test step timeout | `Run tests including property-based tests` step | 15 min |
 | Elapsed-time log | `Log total job elapsed time` step (always runs) | soft warn at 20 min |
 
 The elapsed-time step runs with `if: always()` so it fires even on failure,
 giving a timing signal for slow or hung jobs. It emits a `::warning::` annotation
 if the job exceeds the 20-minute soft target without failing the build.
+
+The validator (`github_actions_test.sh`) enforces all four bounds with dedicated
+checks (checks 8–12). Any workflow that removes a timeout or the elapsed-time
+step will fail CI immediately.
 
 ## Security notes
 
