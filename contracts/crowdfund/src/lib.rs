@@ -2675,6 +2675,10 @@ impl CrowdfundContract {
         }
         let admin = admin_upgrade_mechanism::validate_admin_upgrade(&env);
         admin_upgrade_mechanism::validate_wasm_hash(&new_wasm_hash);
+        assert!(
+            admin_upgrade_mechanism::validate_wasm_hash(&new_wasm_hash),
+            "WASM hash must not be all-zero"
+        );
         let admin = admin_upgrade_mechanism::validate_admin_upgrade(&env);
         admin_upgrade_mechanism::validate_wasm_hash(&new_wasm_hash);
         admin_upgrade_mechanism::perform_upgrade(&env, new_wasm_hash.clone());

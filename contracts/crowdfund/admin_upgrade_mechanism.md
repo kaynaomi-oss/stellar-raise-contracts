@@ -192,7 +192,7 @@ All upgrade operations require the admin to authorize the call via Soroban's `re
 
 The mechanism validates WASM hashes to prevent deployment of invalid code:
 
-- **Non-zero Requirement**: All-zero hashes are rejected
+- **Non-zero Requirement**: All-zero hashes are rejected by `validate_wasm_hash()` **before** the auth check, so the guard cannot be bypassed by providing valid admin credentials
 - **Size Verification**: Hashes must be exactly 32 bytes (SHA-256)
 - **Upload Verification**: The WASM must be uploaded to the ledger before deployment
 
@@ -296,37 +296,23 @@ The test suite provides comprehensive coverage across multiple categories:
 ### Category 3: WASM Hash Validation Tests (6 tests)
 | Test | Description |
 |------|-------------|
-| `test_zero_wasm_hash_rejected` | All-zero hash is invalid |
-| `test_all_zero_32_byte_hash_invalid` | 32-byte zero is invalid |
+| `test_zero_wasm_hash_rejected_before_auth` | All-zero hash rejected before auth check |
+| `test_non_zero_wasm_hash_passes_validation` | Non-zero hashes pass `validate_wasm_hash` |
+| `test_validate_wasm_hash_rejects_zero` | Unit test: zero hash returns `false` |
 | `test_non_zero_wasm_hash_valid` | Non-zero hash passes validation |
 | `test_max_value_wasm_hash_valid` | Maximum value hash is valid |
-| `test_alternating_byte_pattern_valid` | Pattern hash is valid |
 | `test_single_bit_set_hash_valid` | Single bit hash is valid |
 
 ### Category 4: Edge Case Tests (5 tests)
 | Test | Description |
 |------|-------------|
 | `test_upgrade_panics_before_initialize` | Panics without admin |
-| `test_upgrade_requires_authentication` | Auth is mandatory |
-| `test_initialization_with_zero_deadline` | Handles zero deadline |
-| `test_initialization_with_minimum_goal` | Handles minimum values |
-| `test_initialization_with_large_goal` | Handles maximum values |
+| `test_upgrade_requires_auth` | Auth is mandatory |
+| `test_multiple_non_admin_attempts_all_rejected` | Brute-force: all attempts rejected, storage intact |
+| `test_two_contracts_have_independent_admins` | Contract-instance isolation |
+| `test_token_address_cannot_upgrade` | Token address is not the admin |
 
-### Category 5: Security Tests (4 tests)
-| Test | Description |
-|------|-------------|
-| `test_upgrade_blocked_without_explicit_auth` | Blocks unauth requests |
-| `test_replay_attack_prevention` | Prevents replay attacks |
-| `test_event_emission_security` | Events don't leak data |
-| `test_contract_instance_isolation` | Contracts are isolated |
-
-### Category 6: Integration Tests (2 tests)
-| Test | Description |
-|------|-------------|
-| `test_upgrade_integration_full_lifecycle` | Full lifecycle works |
-| `test_upgrade_with_various_init_configs` | Works with all configs |
-
-**Total: 33 comprehensive tests**
+**Total: 12 tests (7 existing + 5 new edge cases)**
 
 ## Usage Examples
 
