@@ -38,6 +38,8 @@ exercises every check against both the real repository and synthetic fixtures.
 | `scripts/github_actions_test.test.sh` | Tests the validator against pass/fail scenarios (11 tests) |
 | `scripts/github_actions_test.sh` | Validates workflow files (8 checks) |
 | `scripts/github_actions_test.test.sh` | Tests the validator (14 tests, edge cases included) |
+| `scripts/github_actions_test.sh` | Validates workflow files (12 checks) |
+| `scripts/github_actions_test.test.sh` | Tests the validator (20 tests, edge cases included) |
 
 Run locally from the repository root:
 
@@ -248,6 +250,30 @@ Without a dedicated frontend job, Jest tests never run in CI. The frontend
 job runs in parallel with the Rust job, adding zero wall-clock time to the
 pipeline.
 
+### Check 9 — `rust_ci.yml` uses `Swatinem/rust-cache`
+
+Without caching, every CI run re-downloads and recompiles all Rust
+dependencies from scratch. `Swatinem/rust-cache` caches `~/.cargo` and
+`target/` between runs, reducing cold-build time by 60–80%.
+
+### Check 10 — `rust_ci.yml` has `timeout-minutes`
+
+Without a timeout, a hung build can consume a GitHub Actions runner for up to
+6 hours, blocking other PRs and wasting CI minutes. A 30-minute cap is
+recommended for the main job.
+
+### Check 11 — `testnet_smoke.yml` has least-privilege permissions
+
+The smoke test only needs to read source code. Explicit
+`permissions: contents: read` prevents a compromised job from pushing commits
+or modifying releases.
+
+### Check 12 — `rust_ci.yml` includes a `wasm-opt` optimisation step
+
+The raw WASM binary from rustc is not size-optimised. Running `wasm-opt -Oz`
+reduces binary size by 20–40%, lowering Stellar deployment costs and speeding
+up contract uploads.
+
 ---
 
 ## Speed optimisations in `rust_ci.yml`
@@ -260,6 +286,7 @@ pipeline.
 | `cache: "npm"` in `setup-node` | Restores `~/.npm` automatically |
 | Parallel `frontend` job | UI tests run alongside Rust checks, not after |
 | `timeout-minutes` bounds | Job: 30 min · WASM build: 10 min · Tests: 15 min |
+| `wasm-opt -Oz` | Reduces WASM binary size 20–40% |
 | Elapsed-time log step | Fires on success and failure; warns if > 20 min |
 
 ---
@@ -269,22 +296,24 @@ pipeline.
 - The validator reads workflow files only — it never writes or executes them.
 - No secrets or credentials are accessed by the validator.
 - `set -euo pipefail` ensures unset variables and pipeline errors are fatal.
+- All `grep` calls use `--` to prevent flag injection from filenames.
 - `actions/checkout@v4` is the current stable, audited release.
 - Using `stellar-cli` (the maintained successor) reduces supply-chain risk
   compared to the deprecated `soroban-cli` package.
 - `timeout-minutes` bounds prevent a compromised or infinite-looping
   dependency from holding a runner indefinitely.
+- `permissions: contents: read` enforces least-privilege on the smoke test job.
 - The spellcheck action runs with default read-only permissions.
 
 ---
 
 ## Test coverage
 
-The test suite (`github_actions_test.test.sh`) covers:
+The test suite (`github_actions_test.test.sh`) covers 20 tests across 12 checks:
 
 | Test | Scenario |
 |---|---|
-| 1 | Real repository passes all checks (happy path) |
+| 1 | Real repository passes all 12 checks (happy path) |
 | 2 | `spellcheck.yml` is missing |
 | 3 | Workflow file exists but is empty (zero bytes) |
 | 4 | Workflow file contains only whitespace (documents current behaviour) |
@@ -297,14 +326,20 @@ The test suite (`github_actions_test.test.sh`) covers:
 | 11 | Smoke test WASM build missing `-p crowdfund` |
 | 12 | Smoke test uses deprecated `soroban-cli` |
 | 13 | `rust_ci.yml` missing `frontend` job |
-| 14 | Multiple simultaneous failures are all reported (no short-circuit) |
+| 14 | `rust_ci.yml` missing `Swatinem/rust-cache` |
+| 15 | `rust_ci.yml` missing `timeout-minutes` |
+| 16 | `testnet_smoke.yml` missing least-privilege permissions |
+| 17 | `rust_ci.yml` missing `wasm-opt` step |
+| 18 | `rust_ci.yml` missing entirely |
+| 19 | `testnet_smoke.yml` missing entirely |
+| 20 | Multiple simultaneous failures are all reported (no short-circuit) |
 
 ---
 
-## What was fixed in the workflow files
+## What was changed in this branch
 
 | File | Change |
 |---|---|
-| `.github/workflows/rust_ci.yml` | `checkout@v6` → `checkout@v4`; removed duplicate WASM build; added `frontend` job; added `timeout-minutes` bounds; added elapsed-time log step |
-| `.github/workflows/testnet_smoke.yml` | `checkout@v6` → `checkout@v4`; added `-p crowdfund`; `soroban-cli` → `stellar-cli`; all `soroban` commands → `stellar` |
-| `.github/workflows/spellcheck.yml` | Replaced empty file with working `cspell-action@v6` workflow |
+| `scripts/github_actions_test.sh` | Added checks 9–12 (rust-cache, timeout, permissions, wasm-opt); extracted `check_file_exists_and_nonempty` helper; added `readonly` to constants; improved `grep` safety with `--` flag; updated summary to show 12/12 |
+| `scripts/github_actions_test.test.sh` | Added tests 14–20 covering new checks 9–12 and additional edge cases; added `VERBOSE` env var support; improved fixture isolation |
+| `scripts/github_actions_test.md` | Documented all 12 checks, 20 tests, VERBOSE flag, and security rationale for new checks |
