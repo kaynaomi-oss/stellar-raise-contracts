@@ -53,62 +53,38 @@ Off-chain indexers can subscribe to `contribute_error` to observe failures witho
 
 ## Overview
 
-Deprecates old panic-based guards in `contribute()` and replaces them with
-typed `ContractError` variants, enabling scripts and CI/CD pipelines to handle
-all error paths programmatically.
+This module replaces ad-hoc panic strings with typed `ContractError` variants and provides:
 
-## Deprecation Notice
-
-The following untyped panics have been **removed** and replaced:
-
-| Old behaviour                        | New typed error                          |
-| :----------------------------------- | :--------------------------------------- |
-| `panic!("amount below minimum")`     | `ContractError::BelowMinimum` (code 9)   |
-| zero-amount pass-through (no guard)  | `ContractError::ZeroAmount` (code 8)     |
-| no campaign-status guard             | `ContractError::CampaignNotActive` (code 10) |
-| no negative-amount guard             | `ContractError::NegativeAmount` (code 11) |
+- **`error_codes`** — numeric constants matching `ContractError`'s `#[repr(u32)]` values for off-chain use.
+- **`describe_error(code)`** — human-readable message for any error code.
+- **`is_retryable(code)`** — distinguishes input errors (caller can fix and retry) from permanent state errors.
+- **`log_contribute_error(env, error)`** — emits a structured diagnostic event before each error return.
 
 ## Error Reference
 
-| Code | Variant               | Trigger                                          | Retryable |
-| :--- | :-------------------- | :----------------------------------------------- | :-------- |
-| 2    | `CampaignEnded`       | `ledger.timestamp > deadline`                    | No        |
-| 6    | `Overflow`            | `checked_add` would wrap on contribution totals  | No        |
-| 8    | `ZeroAmount`          | `amount == 0`                                    | No        |
-| 9    | `BelowMinimum`        | `amount < min_contribution`                      | No        |
-| 10   | `CampaignNotActive`   | campaign status is not `Active`                  | No        |
-| 11   | `NegativeAmount`      | `amount < 0`                                     | No        |
-
-## Security Assumptions
-
-- `contributor.require_auth()` is called before any state mutation.
-- **Negative amounts are rejected first** — before zero/minimum checks — to
-  prevent token-level panics or unexpected transfer behaviour with negative i128 values.
-- Campaign status is checked before amount validation — cancelled/successful
-  campaigns are rejected before any other validation.
-- Token transfer happens before storage writes; failures roll back atomically.
-- Overflow is caught with `checked_add` on both per-contributor and global totals.
-- The deadline check uses strict `>`, so a contribution at exactly the deadline
-  timestamp is **accepted**. Scripts should account for this boundary.
+| Code | Variant            | Trigger                              | Retryable |
+|------|--------------------|--------------------------------------|-----------|
+| 2    | `CampaignEnded`    | `ledger.timestamp > deadline`        | No        |
+| 6    | `Overflow`         | checked_add would overflow           | No        |
+| 8    | `ZeroAmount`       | `amount == 0`                        | Yes       |
+| 9    | `BelowMinimum`     | `amount < min_contribution`          | Yes       |
+| 10   | `CampaignNotActive`| campaign status ≠ `Active`           | No        |
+| 11   | `NegativeAmount`   | `amount < 0`                         | Yes       |
 
 ## Validation Order in `contribute()`
 
 ```
-1. contributor.require_auth()
-2. status == Active          → CampaignNotActive (10)
-3. amount < 0                → NegativeAmount (11)   ← new
-4. amount == 0               → ZeroAmount (8)
-5. amount < min_contribution → BelowMinimum (9)
-6. timestamp > deadline      → CampaignEnded (2)
-7. token transfer
-8. checked_add per-contributor total → Overflow (6)
-9. checked_add global total          → Overflow (6)
+1. status != Active       → CampaignNotActive  (checked first — fast exit)
+2. amount < 0             → NegativeAmount
+3. amount == 0            → ZeroAmount
+4. amount < min           → BelowMinimum
+5. timestamp > deadline   → CampaignEnded
+6. checked_add overflows  → Overflow
 ```
 
-## Usage in Scripts
+## Diagnostic Events
 
-```rust
-use crowdfund::contribute_error_handling::{describe_error, error_codes};
+Each error path emits a `contribute_error` event before returning:
 
 match client.try_contribute(&contributor, &amount) {
     Ok(_) => println!("contributed"),
@@ -183,10 +159,13 @@ All numeric thresholds used in `contribute()` are stored in instance storage
 under `DataKey::MinContribution` and set at initialization time via
 `initialize(..., min_contribution, ...)`. There are no hardcoded numeric
 thresholds in the contribution logic itself.
+| Topic 0            | Topic 1                  | Data   |
+|--------------------|--------------------------|--------|
+| `contribute_error` | `Symbol(<VariantName>)`  | `u32`  |
 
-## Module Location
+Off-chain indexers can subscribe to `contribute_error` to observe failures without parsing host-level error codes.
 
-`contracts/crowdfund/src/contribute_error_handling.rs`
+## Security Considerations
 
 ## Tests
 
@@ -236,3 +215,7 @@ is_retryable_amount_too_low_and_zero_amount_are_retryable  ok
 is_retryable_campaign_ended_and_overflow_are_not_retryable ok
 is_retryable_returns_false_for_negative_amount           ok
 ```
+- `contributor.require_auth()` is called before any validation — auth failure is always the first gate.
+- Negative amounts are rejected before zero/minimum checks to prevent unexpected token-level behaviour.
+- The deadline check uses strict `>`: contributions at exactly the deadline timestamp are accepted.
+- `log_contribute_error` is read-only and cannot be called externally.

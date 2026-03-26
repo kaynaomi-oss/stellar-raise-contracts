@@ -697,6 +697,11 @@ pub struct CampaignInfo {
     /// `goal < MIN_GOAL_AMOUNT`.
     GoalTooLow = 18,
 }
+    ZeroAmount = 8,
+    BelowMinimum = 9,
+    CampaignNotActive = 10,
+    /// Returned by `contribute` when `amount` is negative.
+    NegativeAmount = 11,
 
 /// Interface for an external NFT contract used to mint contributor rewards.
 #[contractclient(name = "NftContractClient")]
