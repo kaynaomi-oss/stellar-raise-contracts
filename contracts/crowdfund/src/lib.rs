@@ -38,6 +38,9 @@ use refund_single_token::{
 mod refund_single_token_test;
 
 pub mod admin_upgrade_mechanism;
+pub mod access_control;
+#[cfg(test)]
+mod access_control_tests;
 pub mod soroban_sdk_minor;
 #[cfg(test)]
 mod soroban_sdk_minor_test;
@@ -176,6 +179,16 @@ pub enum DataKey {
     NFTContract,
     /// Decimal precision of the campaign token (e.g. 7 for XLM, 6 for USDC).
     TokenDecimals,
+
+    // ── Role-separation keys (access_control module) ──────────────────────
+    /// Address with DEFAULT_ADMIN_ROLE — can upgrade, unpause, and transfer roles.
+    DefaultAdmin,
+    /// Address with PAUSER_ROLE — can pause in an emergency but cannot unpause.
+    Pauser,
+    /// Governance address (multisig / DAO) — the only address that may set platform fees.
+    GovernanceAddress,
+    /// Boolean flag — when true, contribute() and withdraw() are blocked.
+    Paused,
 }
 
 // ── Contract Error ──────────────────────────────────────────────────────────
