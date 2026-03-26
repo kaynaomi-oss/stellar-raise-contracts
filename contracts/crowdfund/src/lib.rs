@@ -28,6 +28,7 @@ pub mod cargo_toml_rust;
 // ── Modules ──────────────────────────────────────────────────────────────────
 
 pub mod admin_upgrade_mechanism;
+pub mod access_control;
 pub mod campaign_goal_minimum;
 pub mod cargo_toml_rust;
 pub mod contract_state_size;
@@ -144,8 +145,6 @@ mod soroban_sdk_minor_test;
 pub mod withdraw_event_emission;
 use withdraw_event_emission::{emit_withdrawal_event, mint_nfts_in_batch};
 use withdraw_event_emission::{emit_fee_transferred, emit_withdrawn, mint_nfts_in_batch};
-#[cfg(test)]
-mod withdraw_event_emission_test;
 
 #[cfg(test)]
 #[path = "stellar_token_minter_test.rs"]
@@ -154,11 +153,14 @@ mod soroban_sdk_minor_test;
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 mod stellar_token_minter_test_original;
+// ── Test Modules ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod test;
 #[cfg(test)]
 mod auth_tests;
+#[cfg(test)]
+mod access_control_tests;
 #[cfg(test)]
 #[path = "admin_upgrade_mechanism.test.rs"]
 mod admin_upgrade_mechanism_test;
@@ -297,6 +299,17 @@ mod crowdfund_initialize_function_test;
 #[cfg(test)]
 #[path = "proptest_generator_boundary.test.rs"]
 mod proptest_generator_boundary_tests;
+#[path = "refund_single_token.test.rs"]
+mod refund_single_token_test;
+#[cfg(test)]
+#[path = "proptest_generator_boundary.test.rs"]
+mod proptest_generator_boundary_test;
+#[cfg(test)]
+#[path = "soroban_sdk_minor_test.rs"]
+mod soroban_sdk_minor_test;
+#[cfg(test)]
+#[path = "stellar_token_minter_test.rs"]
+mod stellar_token_minter_test_original;
 #[cfg(test)]
 #[path = "refund_single_token.test.rs"]
 mod refund_single_token_test;
@@ -713,8 +726,11 @@ pub struct CampaignInfo {
     ZeroAmount = 8,
     BelowMinimum = 9,
     CampaignNotActive = 10,
+    BelowMinimum = 14,
+    CampaignNotActive = 15,
     /// Returned by `contribute` when `amount` is negative.
-    NegativeAmount = 11,
+    NegativeAmount = 16,
+}
 
 /// Interface for an external NFT contract used to mint contributor rewards.
 #[contractclient(name = "NftContractClient")]
