@@ -375,7 +375,7 @@ export class GlobalErrorBoundary extends Component<
 
   /**
    * @notice Handles dismiss action
-   * @dev Dismesses the error and shows children anyway (dangerous)
+   * @dev Dismisses the error and shows children anyway (dangerous)
    */
   private handleDismiss = (): void => {
     this.setState({
