@@ -876,19 +876,60 @@ pub use crate::campaign_goal_minimum::MIN_GOAL_AMOUNT as INIT_MIN_GOAL_AMOUNT;
         .set(&DataKey::Roadmap, &empty_roadmap);
 
     // ── 5. Event emission ─────────────────────────────────────────────────
-    // Emit a structured event so off-chain indexers can reconstruct campaign
+    // Emit a bounded event so off-chain indexers can reconstruct campaign
     // state from the event stream without polling individual storage keys.
+    // Only scalar fields are included — no optional strings — to keep the
+    // payload size O(1) regardless of bonus_goal_description length.
+    log_initialize(
+        env,
+        &params.creator,
+        &params.token,
+        params.goal,
+        params.deadline,
+        params.min_contribution,
+    );
+
+    Ok(())
+}
+
+// ── Bounded initialization event ──────────────────────────────────────────────
+
+/// Emits a single bounded `("campaign", "initialized")` event.
+///
+/// @notice Only scalar fields are included in the payload. Optional strings
+///         (e.g. `bonus_goal_description`) are intentionally excluded to keep
+///         event size O(1) and prevent unbounded gas consumption when long
+///         descriptions are provided.
+///
+/// @param  env              The Soroban execution environment.
+/// @param  creator          The campaign creator address.
+/// @param  token            The token contract address.
+/// @param  goal             The funding goal.
+/// @param  deadline         The campaign deadline timestamp.
+/// @param  min_contribution The minimum contribution amount.
+///
+/// @dev    Callers must not pass unbounded data (e.g. raw description strings)
+///         to this function. All string fields must be omitted or pre-truncated
+///         before calling.
+pub fn log_initialize(
+    env: &Env,
+    creator: &Address,
+    token: &Address,
+    goal: i128,
+    deadline: u64,
+    min_contribution: i128,
+) {
     env.events().publish(
         (
             Symbol::new(env, "campaign"),
             Symbol::new(env, "initialized"),
         ),
         (
-            params.creator.clone(),
-            params.token.clone(),
-            params.goal,
-            params.deadline,
-            params.min_contribution,
+            creator.clone(),
+            token.clone(),
+            goal,
+            deadline,
+            min_contribution,
         ),
     );
 // ── Core validation ──────────────────────────────────────────────────────────
@@ -1014,8 +1055,5 @@ pub fn validate_initialization_params_bool(
     min_contribution: i128,
 ) -> bool {
     validate_initialization_params(env, goal, deadline, min_contribution, None, None).is_ok()
-}
-
-    env.storage().instance().set(&DataKey::Roadmap, &empty_roadmap);
 }
 
