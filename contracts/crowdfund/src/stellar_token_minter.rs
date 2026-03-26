@@ -158,6 +158,76 @@ pub fn within_log_budget(logged: u32) -> bool {
 use soroban_sdk::{
     contract, contractimpl, contracttype, Address, Env, String, Symbol, Vec,
 };
+// ── Test constants ────────────────────────────────────────────────────────────
+//
+// Centralised numeric literals used across the stellar_token_minter test suites.
+// Defining them here means CI/CD only needs to update one location when campaign
+// parameters change, and test intent is self-documenting.
+
+/// Default campaign funding goal used in tests (1 000 000 stroops).
+pub const TEST_GOAL: i128 = 1_000_000;
+
+/// Default minimum contribution used in tests (1 000 stroops).
+pub const TEST_MIN_CONTRIBUTION: i128 = 1_000;
+
+/// Default campaign duration used in tests (1 hour in seconds).
+pub const TEST_DEADLINE_OFFSET: u64 = 3_600;
+
+/// Initial token balance minted to the creator in the test setup helper.
+pub const TEST_CREATOR_BALANCE: i128 = 100_000_000;
+
+/// Initial token balance minted to the token-minter test setup helper.
+pub const TEST_MINTER_CREATOR_BALANCE: i128 = 10_000_000;
+
+/// Standard single-contributor balance used in most integration tests.
+pub const TEST_CONTRIBUTOR_BALANCE: i128 = 1_000_000;
+
+/// Contribution amount used in NFT-batch tests (goal / MAX_MINT_BATCH).
+pub const TEST_NFT_CONTRIBUTION: i128 = 25_000;
+
+/// Contribution amount used in the "below batch limit" NFT test.
+pub const TEST_NFT_SMALL_CONTRIBUTION: i128 = 400_000;
+
+/// Contribution amount used in collect_pledges / two-contributor tests.
+pub const TEST_PLEDGE_CONTRIBUTION: i128 = 300_000;
+
+/// Bonus goal threshold used in idempotency tests.
+pub const TEST_BONUS_GOAL: i128 = 1_000_000;
+
+/// Primary goal used in bonus-goal idempotency tests.
+pub const TEST_BONUS_PRIMARY_GOAL: i128 = 500_000;
+
+/// Per-contribution amount used in bonus-goal crossing tests.
+pub const TEST_BONUS_CONTRIBUTION: i128 = 600_000;
+
+/// Seed balance for overflow protection test (small initial contribution).
+pub const TEST_OVERFLOW_SEED: i128 = 10_000;
+
+/// Maximum platform fee in basis points (100 %).
+pub const TEST_FEE_BPS_MAX: u32 = 10_000;
+
+/// Platform fee that exceeds the maximum (triggers panic).
+pub const TEST_FEE_BPS_OVER: u32 = 10_001;
+
+/// Platform fee of 10 % used in fee-deduction tests.
+pub const TEST_FEE_BPS_10PCT: u32 = 1_000;
+
+/// Progress basis points representing 80 % funding.
+pub const TEST_PROGRESS_BPS_80PCT: u32 = 8_000;
+
+/// Progress basis points representing 99.999 % funding (just below goal).
+pub const TEST_PROGRESS_BPS_JUST_BELOW: u32 = 9_999;
+
+/// Contribution amount that is one stroop below the goal.
+pub const TEST_JUST_BELOW_GOAL: i128 = 999_999;
+
+/// Contribution amount used in the "partial accumulation" test.
+pub const TEST_PARTIAL_CONTRIBUTION_A: i128 = 300_000;
+
+/// Second contribution amount used in the "partial accumulation" test.
+pub const TEST_PARTIAL_CONTRIBUTION_B: i128 = 200_000;
+
+// ── Constants ────────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
 #[contracttype]

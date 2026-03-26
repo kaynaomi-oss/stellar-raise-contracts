@@ -108,6 +108,33 @@ The `stellar_token_minter` module centralises all bound-checking logic.
 | `MAX_MINT_BATCH` | 50 | NFT mints per `withdraw` call |
 | `MAX_LOG_ENTRIES` | 200 | Diagnostic log entries per transaction |
 
+### Test Constants
+
+All magic numbers used across the `stellar_token_minter` test suites are
+extracted into named constants in `stellar_token_minter.rs`. CI/CD only needs
+to update one location when campaign parameters change.
+
+| Constant | Value | Used in |
+|---|---|---|
+| `TEST_GOAL` | `1_000_000` | Default campaign goal |
+| `TEST_MIN_CONTRIBUTION` | `1_000` | Default minimum contribution |
+| `TEST_DEADLINE_OFFSET` | `3_600` | Campaign duration (1 hour) |
+| `TEST_CREATOR_BALANCE` | `100_000_000` | Creator token balance in setup |
+| `TEST_CONTRIBUTOR_BALANCE` | `1_000_000` | Standard contributor balance |
+| `TEST_NFT_CONTRIBUTION` | `25_000` | Per-contributor amount in NFT-batch tests |
+| `TEST_NFT_SMALL_CONTRIBUTION` | `400_000` | Amount in below-batch-limit NFT test |
+| `TEST_PLEDGE_CONTRIBUTION` | `300_000` | Amount in collect_pledges tests |
+| `TEST_BONUS_GOAL` | `1_000_000` | Bonus goal threshold |
+| `TEST_BONUS_PRIMARY_GOAL` | `500_000` | Primary goal in bonus-goal tests |
+| `TEST_BONUS_CONTRIBUTION` | `600_000` | Per-contribution in bonus-goal crossing |
+| `TEST_OVERFLOW_SEED` | `10_000` | Seed contribution in overflow test |
+| `TEST_FEE_BPS_MAX` | `10_000` | Maximum platform fee (100%) |
+| `TEST_FEE_BPS_OVER` | `10_001` | Fee that exceeds maximum (panic test) |
+| `TEST_FEE_BPS_10PCT` | `1_000` | 10% platform fee |
+| `TEST_JUST_BELOW_GOAL` | `999_999` | One stroop below goal |
+| `TEST_PARTIAL_CONTRIBUTION_A` | `300_000` | First partial contribution |
+| `TEST_PARTIAL_CONTRIBUTION_B` | `200_000` | Second partial contribution |
+
 ### Helper Functions
 
 | Function | Description |
