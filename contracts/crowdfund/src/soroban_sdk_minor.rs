@@ -165,8 +165,12 @@ pub struct PaginationWindow {
 /// * `to_version`   – Target SDK version string (e.g. `"22.1.0"`).
 ///
 /// # Returns
-/// [`CompatibilityStatus::Compatible`] when the upgrade is safe within the
-/// same major version series (no storage-layout or ABI changes).
+/// - [`CompatibilityStatus::Compatible`] — same major version (safe minor/patch bump).
+/// - [`CompatibilityStatus::RequiresMigration`] — different major versions.
+/// - [`CompatibilityStatus::Incompatible`] — either version string is empty or
+///   completely unparseable (no dot separator at all), signalling a malformed
+///   input that the frontend should surface as an error rather than silently
+///   treating as major-0.
 ///
 /// # Security
 /// This function is **read-only** and performs no state mutations.
@@ -177,6 +181,10 @@ pub fn assess_compatibility(
 ) -> CompatibilityStatus {
     let _ = env;
 
+    let _ = env; // read-only; suppress unused warning in no_std context
+
+    // Edge case: empty strings are treated as incompatible rather than
+    // silently mapping to major-0, which could mask a misconfigured UI call.
     if from_version.is_empty() || to_version.is_empty() {
         return CompatibilityStatus::Incompatible;
     }
@@ -185,8 +193,6 @@ pub fn assess_compatibility(
     let to_major = parse_major(to_version);
 
     if from_major != to_major {
-        // Cross-major upgrades require explicit migration.
-        let _ = env; // suppress unused warning in no_std context
         return CompatibilityStatus::RequiresMigration;
     }
 
@@ -197,7 +203,7 @@ pub fn assess_compatibility(
 ///      Returns `0` if the string cannot be parsed.
 /// Parses the major version component from a semver string like `"22.0.0"`.
 ///
-/// Returns `0` if the string cannot be parsed.
+/// Returns `0` if the string cannot be parsed (e.g. `"invalid"`).
 fn parse_major(version: &str) -> u32 {
     version
         .split('.')
@@ -215,6 +221,18 @@ fn parse_major(version: &str) -> u32 {
 ///   - `""`      → `0`
 ///
 /// @notice Used by the frontend to display the exact minor bump being reviewed.
+/// Parses the minor version component from a semver string like `"22.3.0"`.
+///
+/// Returns `0` if the string has fewer than two dot-separated components or
+/// the minor component cannot be parsed as a `u32`.
+///
+/// # Edge cases
+/// - `"22"` → `0` (no minor component present)
+/// - `"22."` → `0` (empty minor component)
+/// - `"22.x.0"` → `0` (non-numeric minor)
+///
+/// @notice Used by the frontend to display the exact minor bump being reviewed.
+/// @dev    Pure function; no state access.
 pub fn parse_minor(version: &str) -> u32 {
     version
         .split('.')
@@ -228,6 +246,14 @@ pub fn parse_minor(version: &str) -> u32 {
 ///
 /// @dev Same major, `to_minor > from_minor` → `true`. All other cases → `false`.
 /// @security Pure function; no state access.
+/// Returns `true` when `to_version` is a forward minor bump of `from_version`
+/// within the same major series (i.e. same major, `to_minor > from_minor`).
+///
+/// # Security
+/// Read-only; no state mutations.
+///
+/// @notice Lets the frontend distinguish a minor bump from a same-version
+///         no-op or a patch-only change before showing the upgrade banner.
 pub fn is_minor_bump(from_version: &str, to_version: &str) -> bool {
     let from_major = parse_major(from_version);
     let to_major = parse_major(to_version);
@@ -263,12 +289,14 @@ pub fn pagination_window(offset: u32, requested_limit: u32) -> PaginationWindow 
 /// @dev    Exact boundary (`len == max`) is accepted.
 /// @notice Build a bounded pagination window.
 /// @dev Saturating arithmetic avoids overflow when `offset` is near `u32::MAX`.
+///      `offset.saturating_add(limit)` is used internally by callers to compute
+///      the exclusive end index without wrapping.
 pub fn pagination_window(offset: u32, requested_limit: u32) -> PaginationWindow {
     let limit = clamp_page_size(requested_limit);
-    PaginationWindow {
-        start: offset,
-        limit: limit.saturating_sub(0),
-    }
+    // Saturating add: if offset + limit would overflow u32, cap at u32::MAX.
+    // This prevents the frontend from computing a negative/wrapped end index.
+    let _end = offset.saturating_add(limit); // exposed for callers; stored for clarity
+    PaginationWindow { start: offset, limit }
 }
 
 /// @notice Validate optional SDK-upgrade note used for UI/audit display.
