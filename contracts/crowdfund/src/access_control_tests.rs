@@ -6,6 +6,8 @@ use crate::{
     access_control::{
         assert_not_paused, get_default_admin, get_governance, get_pauser, is_paused, pause,
         set_platform_fee, transfer_default_admin, transfer_pauser, unpause,
+        assert_not_paused, get_default_admin, get_governance, get_pauser, is_paused,
+        pause, set_platform_fee, transfer_default_admin, transfer_pauser, unpause,
     },
     DataKey, PlatformConfig,
 };
