@@ -1,6 +1,7 @@
 #![no_std]
 #![allow(missing_docs)]
 #![allow(clippy::too_many_arguments)]
+#![allow(deprecated)]
 
 use soroban_sdk::{
     contract, contractclient, contractimpl, contracttype, token, Address, Env, IntoVal, String,
@@ -8,14 +9,14 @@ use soroban_sdk::{
 };
 
 // --- Modules ---
+pub mod admin_upgrade_mechanism;
+pub mod campaign_goal_minimum;
 pub mod cargo_toml_rust;
 pub mod contract_state_size;
-pub mod admin_upgrade_mechanism;
-pub mod refund_single_token;
-pub mod soroban_sdk_minor;
-pub mod campaign_goal_minimum;
 pub mod contribute_error_handling;
 pub mod proptest_generator_boundary;
+pub mod refund_single_token;
+pub mod soroban_sdk_minor;
 
 // --- Imports from Modules ---
 use refund_single_token::{
@@ -24,9 +25,9 @@ use refund_single_token::{
 
 // --- Tests ---
 #[cfg(test)]
-mod test;
-#[cfg(test)]
 mod auth_tests;
+#[cfg(test)]
+mod test;
 // #[cfg(test)]
 // mod cargo_toml_rust_test;
 // #[cfg(test)]
@@ -274,23 +275,23 @@ impl CrowdfundContract {
             return Err(ContractError::CampaignEnded);
         }
 
-        let mut contributors: Vec<Address> = env
+        let contributors: Vec<Address> = env
             .storage()
             .persistent()
             .get(&DataKey::Contributors)
             .unwrap_or_else(|| Vec::new(&env));
         let is_new_contributor = !contributors.contains(&contributor);
-        if is_new_contributor {
-            if !contract_state_size::validate_contributor_capacity(contributors.len()) {
-                panic!("Too many contributors");
-            }
+        if is_new_contributor
+            && !contract_state_size::validate_contributor_capacity(contributors.len())
+        {
+            panic!("Too many contributors");
         }
 
         let token_address: Address = env.storage().instance().get(&DataKey::Token).unwrap();
         let token_client = token::Client::new(&env, &token_address);
 
         // Transfer tokens from the contributor to this contract.
-        token_client.transfer(&contributor, &env.current_contract_address(), &amount);
+        token_client.transfer(&contributor, env.current_contract_address(), &amount);
 
         // Update the contributor's running total with overflow protection.
         let contribution_key = DataKey::Contribution(contributor.clone());
@@ -394,16 +395,14 @@ impl CrowdfundContract {
             return Err(ContractError::CampaignEnded);
         }
 
-        let mut pledgers: Vec<Address> = env
+        let pledgers: Vec<Address> = env
             .storage()
             .persistent()
             .get(&DataKey::Pledgers)
             .unwrap_or_else(|| Vec::new(&env));
         let is_new_pledger = !pledgers.contains(&pledger);
-        if is_new_pledger {
-            if !contract_state_size::validate_pledger_capacity(pledgers.len()) {
-                panic!("Too many pledgers");
-            }
+        if is_new_pledger && !contract_state_size::validate_pledger_capacity(pledgers.len()) {
+            panic!("Too many pledgers");
         }
 
         // Update the pledger's running total.
@@ -493,7 +492,7 @@ impl CrowdfundContract {
             let amount: i128 = env.storage().persistent().get(&pledge_key).unwrap_or(0);
             if amount > 0 {
                 // Transfer tokens from pledger to contract
-                token_client.transfer(&pledger, &env.current_contract_address(), &amount);
+                token_client.transfer(&pledger, env.current_contract_address(), &amount);
 
                 // Clear the pledge
                 env.storage().persistent().set(&pledge_key, &0i128);
@@ -778,7 +777,7 @@ impl CrowdfundContract {
 
         env.events().publish(
             (soroban_sdk::Symbol::new(&env, "upgrade"), admin),
-            new_wasm_hash
+            new_wasm_hash,
         );
     }
 

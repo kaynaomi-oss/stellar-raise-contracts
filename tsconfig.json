@@ -15,8 +15,7 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["jest", "node", "@testing-library/jest-dom"],
-    "types": ["jest", "node"]
+    "types": ["jest", "node", "@testing-library/jest-dom"]
   },
   "include": [
     "frontend/**/*",

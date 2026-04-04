@@ -2,7 +2,7 @@
 
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
-    token, Address, Env, Symbol,
+    token, Address, Env,
 };
 
 use crate::{CrowdfundContract, CrowdfundContractClient};
@@ -113,7 +113,7 @@ fn test_contribute_requires_own_auth() {
 
     assert_eq!(client.total_raised(), 1_000_000);
     assert_eq!(client.contribution(&contributor), 1_000_000);
-    
+
     // Verify the contribution was recorded for the correct contributor
     let contribution = client.contribution(&contributor);
     assert_eq!(contribution, 1_000_000);

@@ -1,7 +1,7 @@
 {
   "preset": "ts-jest",
   "testEnvironment": "jsdom",
-  "setupFilesAfterEnv": ["./jest.setup.js"],
+  "setupFilesAfterEnv": ["<rootDir>/jest.setup.ts"],
   "moduleFileExtensions": ["ts", "tsx", "js", "jsx"],
   "transform": {
     "^.+\\.(ts|tsx|js|jsx)$": ["ts-jest", {
@@ -12,44 +12,16 @@
         "allowJs": true,
         "module": "commonjs",
         "types": ["jest", "node", "@testing-library/jest-dom"]
-  "moduleFileExtensions": [
-    "ts",
-    "tsx",
-    "js",
-    "jsx"
-  ],
-  "transform": {
-    "^.+\\.(ts|tsx|js|jsx)$": [
-      "ts-jest",
-      {
-        "tsconfig": {
-          "jsx": "react-jsx",
-          "esModuleInterop": true,
-          "allowSyntheticDefaultImports": true,
-          "module": "commonjs"
-        }
-        "module": "commonjs",
-        "allowJs": true
       }
     }]
   },
   "testMatch": [
     "**/*.test.(ts|tsx|js|jsx)"
   ],
-        "module": "commonjs"
-      }
-    }]
-  },
-  "testMatch": ["**/*.test.(ts|tsx|js|jsx)"],
   "transformIgnorePatterns": [
     "node_modules/(?!(@?react|react-dom)/)"
   ],
   "moduleNameMapper": {
     "\\.(css|less|scss|sass)$": "identity-obj-proxy"
-  },
-  "setupFilesAfterEnv": ["<rootDir>/jest.setup.ts"]
   }
-  "setupFilesAfterEnv": [
-    "<rootDir>/frontend/setupTests.ts"
-  ]
 }

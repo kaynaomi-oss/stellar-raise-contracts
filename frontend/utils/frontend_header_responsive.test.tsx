@@ -227,7 +227,7 @@ describe('FrontendHeaderResponsive', () => {
     });
 
     it('should not notify listeners if breakpoint unchanged', () => {
-      const callback = jest.fn();
+      const callback = vi.fn();
       header.subscribe('test-id', callback);
       header.updateBreakpoint(320); // mobile
       header.updateBreakpoint(320); // still mobile - no change expected
@@ -264,7 +264,7 @@ describe('FrontendHeaderResponsive', () => {
     });
 
     it('should notify listeners on config change', () => {
-      const callback = jest.fn();
+      const callback = vi.fn();
       header.subscribe('test-id', callback);
       header.setConfig({ height: 100 });
       expect(callback).toHaveBeenCalledTimes(1);
@@ -366,14 +366,14 @@ describe('FrontendHeaderResponsive', () => {
 
   describe('subscribe/unsubscribe', () => {
     it('should subscribe to config changes', () => {
-      const callback = jest.fn();
+      const callback = vi.fn();
       header.subscribe('test-id', callback);
       header.setConfig({ height: 100 });
       expect(callback).toHaveBeenCalledTimes(1);
     });
 
     it('should unsubscribe from config changes', () => {
-      const callback = jest.fn();
+      const callback = vi.fn();
       header.subscribe('test-id', callback);
       header.unsubscribe('test-id');
       header.setConfig({ height: 100 });
@@ -381,8 +381,8 @@ describe('FrontendHeaderResponsive', () => {
     });
 
     it('should handle multiple subscribers', () => {
-      const callback1 = jest.fn();
-      const callback2 = jest.fn();
+      const callback1 = vi.fn();
+      const callback2 = vi.fn();
       header.subscribe('id1', callback1);
       header.subscribe('id2', callback2);
       header.setConfig({ height: 100 });
@@ -399,7 +399,7 @@ describe('FrontendHeaderResponsive', () => {
     });
 
     it('should clean up listeners on destroy', () => {
-      header.subscribe('test-id', jest.fn());
+      header.subscribe('test-id', vi.fn());
       header.destroy();
       // After destroy, setting config should not throw but also not notify
       expect(() => {
@@ -417,7 +417,7 @@ describe('FrontendHeaderResponsive', () => {
     });
 
     it('should disconnect resizeObserver on destroy when set', () => {
-      const mockDisconnect = jest.fn();
+      const mockDisconnect = vi.fn();
       // @ts-expect-error: accessing private field for test coverage
       header.resizeObserver = { disconnect: mockDisconnect } as unknown as ResizeObserver;
       header.destroy();

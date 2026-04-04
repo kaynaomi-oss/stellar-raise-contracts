@@ -33,7 +33,7 @@ describe("idle state (default)", () => {
   });
 
   it("fires onClick when clicked", () => {
-    const onClick = jest.fn();
+    const onClick = vi.fn();
     const btn = renderBtn({ onClick });
     fireEvent.click(btn);
     expect(onClick).toHaveBeenCalledTimes(1);
@@ -101,7 +101,7 @@ describe("loading state", () => {
   });
 
   it("does NOT fire onClick while loading", () => {
-    const onClick = jest.fn();
+    const onClick = vi.fn();
     const btn = renderBtn({ state: "loading", onClick });
     fireEvent.click(btn);
     expect(onClick).not.toHaveBeenCalled();
@@ -139,7 +139,7 @@ describe("success state", () => {
   });
 
   it("does NOT fire onClick on success", () => {
-    const onClick = jest.fn();
+    const onClick = vi.fn();
     const btn = renderBtn({ state: "success", onClick });
     fireEvent.click(btn);
     expect(onClick).not.toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe("error state", () => {
   });
 
   it("fires onClick when clicked in error state", () => {
-    const onClick = jest.fn();
+    const onClick = vi.fn();
     const btn = renderBtn({ state: "error", onClick });
     fireEvent.click(btn);
     expect(onClick).toHaveBeenCalledTimes(1);
@@ -205,7 +205,7 @@ describe("disabled prop (external edge cases)", () => {
   });
 
   it("does NOT fire onClick when disabled=true", () => {
-    const onClick = jest.fn();
+    const onClick = vi.fn();
     const btn = renderBtn({ disabled: true, onClick });
     fireEvent.click(btn);
     expect(onClick).not.toHaveBeenCalled();
