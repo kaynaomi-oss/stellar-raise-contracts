@@ -1,6 +1,6 @@
 {
   "version": "0.2",
-  "language": "en",
+  "language": "en,en-GB",
   "files": ["**/*.md", "**/*.yml", "**/*.yaml"],
   "ignorePaths": [
     "node_modules",
@@ -8,6 +8,7 @@
     "coverage",
     ".git",
     "package-lock.json",
+    "pnpm-lock.yaml",
     "Cargo.lock",
     "gh_2.45.0_linux_amd64"
   ],
@@ -207,6 +208,22 @@
     "standalone",
     "u32",
     "i128",
-    "u64"
+    "u64",
+    "reprs",
+    "permissionless",
+    "Permissionless",
+    "unsanitized",
+    "Stmts",
+    "Funcs",
+    "wordmark",
+    "sccache",
+    "codegen",
+    "Rustflags",
+    "pnpm",
+    "vitest",
+    "vite",
+    "vitejs",
+    "deserialising",
+    "deserialisation"
   ]
 }

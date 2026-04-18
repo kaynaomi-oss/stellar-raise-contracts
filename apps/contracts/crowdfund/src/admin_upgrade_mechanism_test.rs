@@ -614,7 +614,7 @@ fn storage_unchanged_after_rejected_upgrade() {
 fn test_admin_can_upgrade_with_valid_wasm() {
     mod crowdfund_wasm {
         soroban_sdk::contractimport!(
-            file = "../../target/wasm32-unknown-unknown/release/crowdfund.wasm"
+            file = "../../../target/wasm32-unknown-unknown/release/crowdfund.wasm"
         );
     }
     let (env, _contract_id, client, _admin, _creator, _token) = setup();

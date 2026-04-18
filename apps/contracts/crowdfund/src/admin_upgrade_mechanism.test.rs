@@ -360,7 +360,7 @@ fn test_upgrade_requires_auth() {
 fn test_admin_can_upgrade_with_valid_wasm() {
     mod crowdfund_wasm {
         soroban_sdk::contractimport!(
-            file = "../../target/wasm32-unknown-unknown/release/crowdfund.wasm"
+            file = "../../../target/wasm32-unknown-unknown/release/crowdfund.wasm"
         );
     }
 
@@ -949,7 +949,7 @@ fn test_upgrade_requires_auth() {
 fn test_admin_can_upgrade_with_valid_wasm() {
     mod crowdfund_wasm {
         soroban_sdk::contractimport!(
-            file = "../../target/wasm32-unknown-unknown/release/crowdfund.wasm"
+            file = "../../../target/wasm32-unknown-unknown/release/crowdfund.wasm"
         );
     }
 
