@@ -5,7 +5,7 @@ set -e
 # 3️⃣ Protected branch checks for main
 protected_branch='refs/heads/main'
 current_user=$(git config user.email)
-allowed_user='shownzy001@gmail.com'
+allowed_user='misraisiguzor@gmail.com'
 z40=0000000000000000000000000000000000000000
 
 while read local_ref local_sha remote_ref remote_sha
